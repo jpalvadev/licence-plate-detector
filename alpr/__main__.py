@@ -70,11 +70,7 @@ def _run_debug(settings, source: Path, out_dir: Path) -> int:
     """Single-process run of the identical pipeline over a local file."""
     pipeline = Pipeline(settings)
     reader = RtspReader()
-    cmd = reader.file_command(str(source))
-    if source.suffix.lower() == ".jpg" or source.suffix.lower() == ".jpeg":
-        # Single image: ffmpeg rawvideo needs a frame count; use the image once.
-        cmd = [cmd[0], "-loglevel", "error", "-i", str(source), "-frames:v", "1", "-f", "rawvideo",
-               "-pix_fmt", "bgr24", "-"]
+    cmd = reader.file_command(str(source), settings.video_w, settings.video_h)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)  # noqa: S1731
     nbytes = settings.video_w * settings.video_h * 3
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -65,9 +65,9 @@ class Pipeline:
         interval = 1.0 / self.settings.detect_fps if self.settings.detect_fps > 0 else 0.0
         if now_mono - self.last_detect_mono >= interval:
             self.last_detect_mono = now_mono
-            self.last_overlay = self.detection_pass(frame)
+            self.last_overlay = self.detection_pass(frame, timestamp)
         rendered = self.render(frame)
-        jpg = cv2.imencode(".jpg", rendered, quality=self.settings.jpeg_quality)[1].tobytes()
+        jpg = cv2.imencode(".jpg", rendered, [cv2.IMWRITE_JPEG_QUALITY, self.settings.jpeg_quality])[1].tobytes()
         self.jpeg_buffer.append(jpg)
         self.last_frame = frame
 
@@ -139,7 +139,7 @@ class Pipeline:
             s = self.settings
             frame = np.zeros((s.video_h, s.video_w, 3), dtype=np.uint8)
         rendered = self.render(frame, banner=self.rtsp.offline_reason)
-        jpg = cv2.imencode(".jpg", rendered, quality=self.settings.jpeg_quality)[1].tobytes()
+        jpg = cv2.imencode(".jpg", rendered, [cv2.IMWRITE_JPEG_QUALITY, self.settings.jpeg_quality])[1].tobytes()
         self.jpeg_buffer.append(jpg)
 
     def render(self, frame: np.ndarray, banner: str | None = None) -> np.ndarray:

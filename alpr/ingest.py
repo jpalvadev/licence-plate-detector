@@ -68,7 +68,7 @@ class RtspReader:
             "-",
         ]
 
-    def file_command(self, path: str) -> list[str]:
+    def file_command(self, path: str, w: int, h: int) -> list[str]:
         """Same rawvideo pipe for local debug files (``--source file.mp4|jpg``, Q16)."""
         return [
             self.ffmpeg_exe(),
@@ -79,6 +79,8 @@ class RtspReader:
             "rawvideo",
             "-pix_fmt",
             "bgr24",
+            "-s",
+            f"{w}x{h}",
             "-",
         ]
 
