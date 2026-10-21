@@ -1,8 +1,8 @@
 # Argentine Mercosur License Plate Detector (ALPR)
 
 Automatic license plate recognition for **Argentine Mercosur plates** from a single
-RTSP camera on a **CPU-only Linux server**, 100% free & open source — no paid APIs,
-no cloud, no PyTorch, no Ultralytics runtime.
+RTSP camera on a **CPU-only Windows server** (Python 3.12.7), 100% free & open source —
+no paid APIs, no cloud, no PyTorch, no Ultralytics runtime.
 
 Pipeline: **detect** (ONNX plate detector) → **OCR** (ONNX whole-plate reader) →
 **validate** against the two Argentine formats → **dedup events** appended to a CSV
@@ -62,20 +62,22 @@ detector through the same `PlateDetector` contract (documented in `alpr/detector
 
 ## Setup (bare venv, no Docker)
 
-Target: Python 3.12+ on Linux.
+Target: **Windows**, Python 3.12.x (the production server runs 3.12.7). All commands are
+cmd.exe, run from the repo root; see ADR-0005 for the Windows-only / on-demand decision.
 
-```bash
-python -m venv .venv && . .venv/activate
+```bat
+python -m venv .venv
+call .venv\Scripts\activate
 pip install onnxruntime numpy opencv-python-headless fastapi uvicorn python-dotenv imageio-ffmpeg
-python scripts/fetch_models.py          # detector + default OCR; add --all for the fallback too
-cp .env.example .env                    # fill in RTSP endpoint + credentials
+python scripts\fetch_models.py          :: detector + default OCR; add --all for the fallback too
+copy .env.example .env                  :: fill in RTSP endpoint + credentials
 ```
 
 ## Run
 
-```bash
-python -m alpr                  # live: capture thread + pipeline + dashboard on HTTP_PORT
-python -m alpr --source clip.mp4    # debug: identical pipeline over a local .mp4/.jpg
+```bat
+python -m alpr                  :: live: capture thread + pipeline + dashboard on HTTP_PORT
+python -m alpr --source clip.mp4 :: debug: identical pipeline over a local .mp4/.jpg
 ```
 
 Open the dashboard at `http://<server>:8080/` — MJPEG stream with bounding boxes,
@@ -86,21 +88,45 @@ All tuning knobs are in `.env` (see `.env.example`): endpoint, credentials, ROI
 (normalized `left,top,right,bottom`), `DETECT_FPS`, `DEDUP_WINDOW_S`, model choice
 (`OCR_MODEL=cct_s_v2_global|arg_cnn_ocr`), render size, HTTP port.
 
-## systemd (example unit)
+## Deploying to another machine (step by step)
 
-```ini
-# /etc/systemd/system/alpr.service
-[Unit]
-Description=Argentine Mercosur ALPR
+Nothing is copied by hand except the ONNX weights, which the fetch script re-downloads
+pinned by checksum. Weights, `.env`, `events.csv` and sample footage never leave a
+machine through git (see `.gitignore`).
 
-[Service]
-WorkingDirectory=/opt/alpr
-ExecStart=/opt/alpr/.venv/bin/python -m alpr
-Restart=always
+```bat
+git clone https://github.com/<handle>/licence-plate-detector.git
+cd licence-plate-detector
+python -m venv .venv
+call .venv\Scripts\activate
+pip install onnxruntime numpy opencv-python-headless fastapi uvicorn python-dotenv imageio-ffmpeg
+python scripts\fetch_models.py          :: verify checksums, then copy your .env from the old machine
+python -m alpr                          :: open the dashboard at http://<machine>:8080/
 ```
 
-*(Copy the repo to `/opt/alpr`, activate the venv's packages system-wide or point
-`ExecStart` at the venv python.)*
+Started on demand — no service manager (ADR-0005): relaunch it manually after a reboot;
+the Events log survives because the CSV is append-only.
+
+## Test rig: simulated camera with mediamtx
+
+Validates the whole RTSP ingest path on one machine — the app reads `sample.mp4`
+looped through mediamtx exactly as it reads the real camera.
+
+```bat
+:: window A: mediamtx (stock config: RTSP server on port 8554, no edits needed)
+cd C:\path\to\mediamtx && .\mediamtx.exe
+
+:: window B: loop the sample into mediamtx (drop a sample.mp4 at the repo root first;
+:: it is gitignored — real plates must never enter the repo)
+ffmpeg -re -stream_loop -1 -i sample.mp4 -c copy -f rtsp rtsp://127.0.0.1:8554/mystream
+
+:: window C: point the app at the rig (process env beats .env, no file edit needed)
+set RTSP_ENDPOINT=127.0.0.1:8554/mystream
+python -m alpr
+```
+
+Expected: detections + events rows on the sample's plates; killing window B mid-run must
+trigger the `STREAM OFFLINE` banner and the reconnect/backoff ladder, not a crash.
 
 ## Development
 
@@ -115,7 +141,7 @@ alpr/               package: config, ingest, detector, ocr, validation, events,
                     pipeline, server (+ dashboard.html)
 scripts/fetch_models.py                pinned-URL ONNX downloader with checksum verify
 models/                                gitignored ONNX weights
-docs/adr/                              decision records (model stack, runtime, CSV log, detector caveat)
+docs/adr/                              decision records (model stack, runtime, CSV log, detector caveat, Windows/on-demand run)
 docs/agents/, GLOSSARY.md              agent conventions + canonical vocabulary
 tests/                                 stdlib unittest suite
 ```
@@ -129,5 +155,7 @@ tests/                                 stdlib unittest suite
 - A hung (but not dead) ffmpeg can stall the capture read; the reconnect loop covers
   crashes/exits, not wedged sockets.
 - No auth on the dashboard by design — LAN only (Q17).
+- Started on demand (Q8 / ADR-0005): closing the terminal stops the app; relaunch by hand —
+  supervision (NSSM, Task Scheduler) can be added later without touching the app.
 
-MIT-style pipeline code; consult `docs/adr/0001` and `0004` for model licensing.
+Code is MIT-licensed (`LICENSE`); consult `docs/adr/0001` and `0004` for model licensing.
