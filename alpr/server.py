@@ -10,7 +10,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from fastapi import FastAPI, Response, StreamingResponse
+from fastapi import FastAPI, Response
+from starlette.responses import StreamingResponse
 
 from .config import Settings
 from .pipeline import Pipeline
@@ -48,7 +49,7 @@ def make_app(pipeline: Pipeline):
 
     @app.get("/plates.csv")
     def plates_csv():
-        return pipeline.log.path.read_text(encoding="utf-8")
+        return Response(pipeline.log.path.read_text(encoding="utf-8"), media_type="text/csv")
 
     return app
 
