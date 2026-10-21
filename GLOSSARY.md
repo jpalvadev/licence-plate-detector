@@ -12,10 +12,6 @@ _Avoid_: license plate, chapa
 A six-character Argentine identification plate of the 1995–2016 era, arranged `ABC 123` (three letters, three digits) — superseded by Mercosur plates only for new registrations from April 2016, so they remain common on older vehicles. Whether legacy plates are in play at all is set by the format set, not by the camera. It carries no vehicle class in its characters (in that era car and cargo variants shared the same characters).
 _Avoid_: old plate, old format
 
-**Vehicle class**:
-The category a plate string proves about the vehicle: only the car format proves CAR. Nothing else — not the legacy format, not any other string — proves a class. The class is a property of the plate string itself, never of the camera or the vehicle pixels. Motorcycles are out of the domain: the operator's site does not care for them in either era.
-_Avoid_: type, kind
-
 **Sighting**:
 One observation of a plate on one detection pass: a bounding box, a raw reading, and a confidence. A sighting is an occurrence, not a record.
 _Avoid_: detection, hit
@@ -25,15 +21,15 @@ The text the OCR produces for a sighting, before normalization — may contain s
 _Avoid_: text, output
 
 **Validated plate**:
-A raw reading after normalization (uppercased, separators stripped) that matches one of the formats in the format set exactly. A track's event row is validated when its consensus reading is a validated plate.
+A raw reading after normalization (uppercased, separators stripped) that matches one of the formats in the format set exactly. Only a track whose consensus reading is a validated plate becomes an event row (ADR-0009).
 _Avoid_: clean text, valid string
 
 **Unvalidated reading**:
-A raw reading that matches no format in the format set after normalization. Its sightings join the same plate track as better readings of the same box; only if the track's whole consensus comes out unvalidated is the event logged with status `UNVALIDATED` (plurality raw reading), so it can be reviewed against the recording later.
+A raw reading that matches no format in the format set after normalization. Its sightings join the same plate track as better readings of the same box; when a track's consensus comes out unvalidated the event logs no row at all (ADR-0009) — it stays visible only in the live render and in the camera recording.
 _Avoid_: failed OCR, garbage
 
 **Recognition event**:
-One occurrence of a physical plate, bounded by a plate track rather than by a string: consecutive detections of the same box in motion belong to one event regardless of what the OCR read on each pass. An event yields exactly one row in the Events log, carrying the plurality reading of its sightings (ties → higher confidence). Reappearance of a plate after the event closed is a new event.
+One occurrence of a physical plate, bounded by a plate track rather than by a string: consecutive detections of the same box in motion belong to one event regardless of what the OCR read on each pass. An event with a validated consensus yields exactly one row in the Events log, carrying the plurality reading of its sightings (ties → higher confidence); an event whose consensus is unvalidated yields no row at all (ADR-0009). Reappearance of a plate after the event closed is a new event.
 _Avoid_: detection, log entry, record, sighting
 
 **Plate track**:
@@ -41,7 +37,7 @@ The spatial continuity of a plate across detection passes: a sighting whose box 
 _Avoid_: tracker (that's the mechanism), blob, detection chain
 
 **Events log**:
-The append-only CSV record of Recognition events — one row written when an event **closes**, carrying the event's consensus reading over all its sightings (not the first sighting's reading). Survives restarts; served to the frontend on demand.
+The append-only CSV record of logged Recognition events — one row written when an event **closes**, carrying the event's consensus reading over all its sightings (not the first sighting's reading). Only events with a validated consensus are logged (ADR-0009). Survives restarts; served to the frontend on demand.
 _Avoid_: event buffer, history file
 
 **Dedup window**:

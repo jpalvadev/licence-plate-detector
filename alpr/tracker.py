@@ -6,16 +6,18 @@ unmatched sighting opens a new track. A track tolerates up to ``max_misses``
 consecutive detection passes in which it was not seen; exceeding that closes it —
 as does stream loss (:meth:`flush`) — and one closed track yields exactly one
 Events log row carrying the plurality reading of its sightings (validated
-readings preferred, ties broken by higher confidence). ``dedup_window_s`` is only
-a last-line guard: a closed event's exact consensus string suppresses further
-identical rows inside the window, plugging duplicate rows from split tracks.
+readings preferred, ties broken by higher confidence), but only when that
+consensus matches an active format: an unvalidated consensus logs no row at all
+(ADR-0009). ``dedup_window_s`` is only a last-line guard: a closed event's exact
+consensus string suppresses further identical rows inside the window, plugging
+duplicate rows from split tracks.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from .events import EventLog, class_for, status_for
+from .events import EventLog, status_for
 from .validation import classify, normalize
 
 # IoU is computed on boxes dilated by this fraction of their own size on each side:
@@ -47,8 +49,8 @@ class PlateTracker:
 
     Public seam: feed sightings with :meth:`record`, close passes with :meth:`end_pass`
     and stream death with :meth:`flush`; the observable effect is the rows appended
-    to the Events log at event **close** (timestamp = first sighting, confidence =
-    winning sighting).
+    to the Events log at event **close** — validated consensus only (ADR-0009):
+    timestamp = first sighting, confidence = winning sighting.
     """
 
     def __init__(self, log: EventLog, iou_thresh: float = 0.3, max_misses: int = 6, dedup_window_s: float = 10.0, include_legacy: bool = False):
@@ -83,29 +85,31 @@ class PlateTracker:
         best.sightings.append(sighting)
         return False
 
-    def end_pass(self, now: float) -> list[tuple[str, str, str, str, float]]:
+    def end_pass(self, now: float) -> list[tuple[str, str, str, float]]:
         """Close every track whose miss count passed the tolerance; one row each."""
         overdue = [t for t in self.tracks if self.pass_index - t.last_pass > self.max_misses]
         self.tracks = [t for t in self.tracks if self.pass_index - t.last_pass <= self.max_misses]
         self.pass_index += 1
         return self._close(overdue, now)
 
-    def flush(self, now: float) -> list[tuple[str, str, str, str, float]]:
+    def flush(self, now: float) -> list[tuple[str, str, str, float]]:
         """Stream death: close all open tracks immediately (bounded work, no-op after)."""
         open_tracks, self.tracks = self.tracks, []
         return self._close(open_tracks, now)
 
-    def _close(self, tracks: list[_Track], now: float) -> list[tuple[str, str, str, str, float]]:
-        """Consensus per closing track; the exact-string guard suppresses re-emission."""
-        rows: list[tuple[str, str, str, str, float]] = []
+    def _close(self, tracks: list[_Track], now: float) -> list[tuple[str, str, str, float]]:
+        """Consensus per closing track; only a format-matching consensus is logged."""
+        rows: list[tuple[str, str, str, float]] = []
         for track in tracks:
             text, confidence = self._consensus(track)
+            format_match = classify(text, include_legacy=self.include_legacy)
+            if not format_match:
+                continue  # ADR-0009: consensus matching no active format produces no entry
             self._prune_closed_strings(now)
             if text in self.closed_strings:
                 continue  # guard: same exact string already closed inside the window
             self.closed_strings[text] = now
-            format_match = classify(text, include_legacy=self.include_legacy)
-            row = (self._iso(track.first_now), text, class_for(format_match or ""), status_for(format_match or ""), confidence)
+            row = (self._iso(track.first_now), text, status_for(format_match), confidence)
             self.log.append(*row)
             rows.append(row)
         return rows

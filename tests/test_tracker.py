@@ -1,7 +1,8 @@
 """Unit tests for the plate-track tracker (run: python -m unittest discover -s tests).
 
-Seam: the public PlateTracker interface (record / end_pass / flush). Every
-observation is a row in the Events log CSV — ADR-0006 (event identity = plate track).
+Seam: the public PlateTracker interface (record / end_pass / flush). A closed
+track is a row in the Events log CSV only when its consensus matches an active
+format (ADR-0009); ADR-0006 gives event identity (plate track).
 """
 
 import tempfile
@@ -9,7 +10,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from alpr.events import STATUS_CAR, STATUS_LEGACY, STATUS_UNVALIDATED, EventLog
+from alpr.events import STATUS_CAR, STATUS_LEGACY, EventLog
 from alpr.tracker import PlateTracker
 
 
@@ -42,7 +43,7 @@ class PlateTrackLifecycleTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "AB123CD", "CAR", STATUS_CAR, "0.5000"]],
+                [[iso(1000.0), "AB123CD", STATUS_CAR, "0.5000"]],
             )
 
     def test_exact_string_reemits_after_window(self):
@@ -59,7 +60,7 @@ class PlateTrackLifecycleTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + 4.0 * i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "AB123CD", "CAR", STATUS_CAR, "0.5000"], [iso(1024.0), "AB123CD", "CAR", STATUS_CAR, "0.5000"]],
+                [[iso(1000.0), "AB123CD", STATUS_CAR, "0.5000"], [iso(1024.0), "AB123CD", STATUS_CAR, "0.5000"]],
             )
 
     def test_moving_box_stays_one_track(self):
@@ -74,7 +75,7 @@ class PlateTrackLifecycleTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "AD537XP", "CAR", STATUS_CAR, "0.4500"]],
+                [[iso(1000.0), "AD537XP", STATUS_CAR, "0.4500"]],
             )
 
     def test_jittery_box_stays_one_track(self):
@@ -92,7 +93,7 @@ class PlateTrackLifecycleTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "AD537XP", "CAR", STATUS_CAR, "0.4000"]],
+                [[iso(1000.0), "AD537XP", STATUS_CAR, "0.4000"]],
             )
 
     def test_same_pass_duplicate_box_merges(self):
@@ -108,7 +109,7 @@ class PlateTrackLifecycleTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "AG010DT", "CAR", STATUS_CAR, "0.5000"]],
+                [[iso(1000.0), "AG010DT", STATUS_CAR, "0.5000"]],
             )
 
     def test_two_cars_side_by_side_stay_separate(self):
@@ -126,8 +127,8 @@ class PlateTrackLifecycleTests(unittest.TestCase):
             self.assertEqual(
                 rows(log),
                 [
-                    [iso(1000.0), "XY789ZW", "CAR", STATUS_CAR, "0.6000"],
-                    [iso(1000.0), "AB123CD", "CAR", STATUS_CAR, "0.5000"],
+                    [iso(1000.0), "XY789ZW", STATUS_CAR, "0.6000"],
+                    [iso(1000.0), "AB123CD", STATUS_CAR, "0.5000"],
                 ],
             )
 
@@ -142,8 +143,8 @@ class PlateTrackLifecycleTests(unittest.TestCase):
             self.assertEqual(
                 rows(log),
                 [
-                    [iso(1000.0), "AB123CD", "CAR", STATUS_CAR, "0.5000"],
-                    [iso(1000.0), "XY789ZW", "CAR", STATUS_CAR, "0.6000"],
+                    [iso(1000.0), "AB123CD", STATUS_CAR, "0.5000"],
+                    [iso(1000.0), "XY789ZW", STATUS_CAR, "0.6000"],
                 ],
             )
 
@@ -160,7 +161,7 @@ class RecognitionConsensusTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "AD537XP", "CAR", STATUS_CAR, "0.4000"]],
+                [[iso(1000.0), "AD537XP", STATUS_CAR, "0.4000"]],
             )
 
     def test_plurality_reading_wins(self):
@@ -174,7 +175,7 @@ class RecognitionConsensusTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "AB123CD", "CAR", STATUS_CAR, "0.5000"]],
+                [[iso(1000.0), "AB123CD", STATUS_CAR, "0.5000"]],
             )
 
     def test_plurality_tie_broken_by_confidence(self):
@@ -188,10 +189,11 @@ class RecognitionConsensusTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "AB123CE", "CAR", STATUS_CAR, "0.7000"]],
+                [[iso(1000.0), "AB123CE", STATUS_CAR, "0.7000"]],
             )
 
-    def test_unvalidated_track_logs_plurality_raw(self):
+    def test_unvalidated_consensus_logs_no_row(self):
+        # ADR-0009: a track whose consensus matches no format produces no entry at all.
         with tempfile.TemporaryDirectory() as tmp:
             log = EventLog(Path(tmp) / "events.csv")
             tracker = PlateTracker(log, iou_thresh=0.3, max_misses=3, dedup_window_s=10.0)
@@ -200,26 +202,21 @@ class RecognitionConsensusTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             for i in range(3, 7):
                 tracker.end_pass(now=1000.0 + i)
-            self.assertEqual(
-                rows(log),
-                [[iso(1000.0), "517RP", "", STATUS_UNVALIDATED, "0.7000"]],
-            )
+            self.assertEqual(rows(log), [])
 
 
 class FormatSetTests(unittest.TestCase):
     # The format set (ADR-0008) is one knob; the observable effect at this seam is
     # which rows the SAME sightings produce.
-    def test_legacy_shape_is_unvalidated_under_mercosur_only(self):
+    def test_legacy_shape_logs_no_row_under_mercosur_only(self):
+        # ADR-0009: knob off — the legacy consensus matches no active format, so nothing logs.
         with tempfile.TemporaryDirectory() as tmp:
             log = EventLog(Path(tmp) / "events.csv")
             tracker = PlateTracker(log, iou_thresh=0.3, max_misses=3, dedup_window_s=10.0)
             tracker.record(now=1000.0, box=(0, 0, 100, 30), raw="ABC 123", confidence=0.7)
             for i in range(0, 5):
                 tracker.end_pass(now=1000.0 + i)
-            self.assertEqual(
-                rows(log),
-                [[iso(1000.0), "ABC123", "", STATUS_UNVALIDATED, "0.7000"]],
-            )
+            self.assertEqual(rows(log), [])
 
     def test_legacy_row_under_plus_legacy(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -230,7 +227,7 @@ class FormatSetTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "ABC123", "", STATUS_LEGACY, "0.7000"]],  # class empty: characters prove no class
+                [[iso(1000.0), "ABC123", STATUS_LEGACY, "0.7000"]],
             )
 
     def test_consensus_prefers_validated_legacy_reading(self):
@@ -246,7 +243,7 @@ class FormatSetTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "ABC123", "", STATUS_LEGACY, "0.4000"]],
+                [[iso(1000.0), "ABC123", STATUS_LEGACY, "0.4000"]],
             )
 
     def test_mercosur_car_still_wins_over_legacy_shape(self):
@@ -263,7 +260,7 @@ class FormatSetTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "AB123CD", "CAR", STATUS_CAR, "0.5000"]],
+                [[iso(1000.0), "AB123CD", STATUS_CAR, "0.5000"]],
             )
 
 
@@ -292,7 +289,7 @@ class StreamLossFlushTests(unittest.TestCase):
             self.assertEqual(len(closed), 1)
             self.assertEqual(
                 rows(log),
-                [[iso(1000.0), "AG517RP", "CAR", STATUS_CAR, "0.8000"]],
+                [[iso(1000.0), "AG517RP", STATUS_CAR, "0.8000"]],
             )
 
     def test_flush_on_dead_stream_is_noop(self):

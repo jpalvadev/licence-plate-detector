@@ -1,35 +1,30 @@
-"""Recognition events: append-only CSV events log (ADR-0003; row timing per ADR-0006)."""
+"""Recognition events: append-only CSV events log (ADR-0003; row timing per ADR-0006;
+validated-only rows and no class column per ADR-0009)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-HEADER = ("timestamp", "plate", "vehicle_class", "status", "confidence")
+HEADER = ("timestamp", "plate", "status", "confidence")
 STATUS_CAR = "VALIDATED_CAR"
 STATUS_LEGACY = "VALIDATED_LEGACY"
-STATUS_UNVALIDATED = "UNVALIDATED"
 
 
 def status_for(format_match: str) -> str:
-    """Map a format match (``validation.classify`` output) to an Events log status."""
+    """Map a format match (``validation.classify`` output) to an Events log status.
+
+    ADR-0009: only validated plates reach the log, so anything that is not a format
+    match has no status to return — fail fast like the other config seams.
+    """
     if format_match == "CAR":
         return STATUS_CAR
     if format_match == "LEGACY":
         return STATUS_LEGACY
-    return STATUS_UNVALIDATED
-
-
-def class_for(format_match: str) -> str:
-    """Events log ``vehicle_class`` column: only the car format proves a class.
-
-    The legacy match is a format, not a class — car and cargo variants shared those
-    characters (ADR-0008) — so it leaves the column empty.
-    """
-    return format_match if format_match == "CAR" else ""
+    raise ValueError(f"not a format match: {format_match!r}")
 
 
 class EventLog:
-    """Append-only CSV on disk; one row written when a Recognition event closes."""
+    """Append-only CSV on disk; one row written when a validated Recognition event closes."""
 
     def __init__(self, path: Path):
         self.path = path
@@ -38,8 +33,8 @@ class EventLog:
             with path.open("w", newline="", encoding="utf-8") as fh:
                 fh.write(",".join(HEADER) + "\n")
 
-    def append(self, timestamp: str, plate: str, vehicle_class: str, status: str, confidence: float) -> None:
-        row = [timestamp, plate, vehicle_class, status, f"{confidence:.4f}"]
+    def append(self, timestamp: str, plate: str, status: str, confidence: float) -> None:
+        row = [timestamp, plate, status, f"{confidence:.4f}"]
         with self.path.open("a", newline="", encoding="utf-8") as fh:
             fh.write(",".join(row) + "\n")
             fh.flush()

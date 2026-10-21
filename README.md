@@ -5,7 +5,7 @@ RTSP camera on a **CPU-only Windows server** (Python 3.12.7), 100% free & open s
 no paid APIs, no cloud, no PyTorch, no Ultralytics runtime.
 
 Pipeline: **detect** (ONNX plate detector) → **OCR** (ONNX whole-plate reader) →
-**validate** against the configured **format set** (`PLATE_FORMATS`, ADR-0008) → **one event row per car pass**
+**validate** against the configured **format set** (`PLATE_FORMATS`, ADR-0008) → **one event row per validated car pass**
 (appended to a CSV; event identity is the plate track, not the plate string)
 and shown on a live **MJPEG web dashboard**.
 
@@ -14,11 +14,12 @@ and shown on a live **MJPEG web dashboard**.
 | Car (Mercosur, current) | `AB 123 CD` | `AB 123 CD` | `^[A-Z]{2}[0-9]{3}[A-Z]{2}$` |
 | Legacy car (1995–2016) | `ABC 123` | `ABC 123` | `^[A-Z]{3}[0-9]{3}$` — only with `PLATE_FORMATS=MERCOSUR_PLUS_LEGACY` |
 
-Alphabet is A–Z (no Ñ). Motorcycles are **out of the domain in either era** (ADR-0007) —
-their readings land as `UNVALIDATED` rows. So do readings that match no format in the
-format set: they are still logged as `UNVALIDATED`, reviewable later. With legacy mode on,
-neighbouring countries sharing the 3+3 shape (Paraguay, Peru) validate as `VALIDATED_LEGACY`
-noise — the status column keeps them filterable (ADR-0008).
+Alphabet is A–Z (no Ñ). Motorcycles are **out of the domain in either era** (ADR-0007).
+Readings that match no format in the configured format set produce **no entry at all**:
+no CSV row, no dashboard row (ADR-0009) — they stay visible only as `?` boxes on the
+live stream. With legacy mode on, neighbouring countries sharing the 3+3 shape
+(Paraguay, Peru) validate as `VALIDATED_LEGACY` noise — the status column keeps
+them filterable (ADR-0008).
 
 ## Architecture
 
@@ -39,7 +40,7 @@ RTSP camera ──ffmpeg(imageio-ffmpeg)──► capture thread ──► bound
 - If the RTSP stream dies, ffmpeg exits, the capture thread relaunches it with
   exponential backoff (capped at 15s) and the stream shows a `STREAM OFFLINE` banner.
   The server never crashes.
-- Full design rationale lives in `docs/adr/` (see ADR-0001…0008).
+- Full design rationale lives in `docs/adr/` (see ADR-0001…0009).
 
 ## Models & provenance
 
@@ -85,7 +86,7 @@ python -m alpr --source clip.mp4 :: debug: identical pipeline over a local .mp4/
 ```
 
 Open the dashboard at `http://<server>:8080/` — MJPEG stream with bounding boxes,
-decoded plate, vehicle class, confidence, plus the tail of the events log.
+decoded plate, status, confidence, plus the tail of the events log.
 `GET /plates.csv` serves the raw CSV for download.
 
 All tuning knobs are in `.env` (see `.env.example`): endpoint, credentials, ROI
@@ -147,7 +148,7 @@ alpr/               package: config, ingest, detector, ocr, validation, events,
                     pipeline, server (+ dashboard.html)
 scripts/fetch_models.py                pinned-URL ONNX downloader with checksum verify
 models/                                gitignored ONNX weights
-docs/adr/                              decision records (model stack, runtime, CSV log, detector caveat, Windows/on-demand run, plate domain + format set)
+docs/adr/                              decision records (model stack, runtime, CSV log, detector caveat, Windows/on-demand run, plate domain + format set, validated-only event log)
 docs/agents/, GLOSSARY.md              agent conventions + canonical vocabulary
 tests/                                 stdlib unittest suite
 ```
@@ -157,9 +158,9 @@ tests/                                 stdlib unittest suite
 - The **detector** is generic license-plate trained (all countries) — its bounding boxes
   are country-agnostic; Argentine-specificity comes from the **OCR** (CCT-S v2 global,
   trained on the AR `arg-plates` set) plus the regex validation of the configured format
-  set, and false detections from non-AR plates get filtered out as UNVALIDATED at worst
-  (in legacy mode, neighbouring 3+3 shapes — Paraguay, Peru — validate instead; filter by
-  status). See ADR-0004 and ADR-0008.
+  set, and false detections from non-AR plates get filtered out: they match no format, so
+  no row is logged (ADR-0009; in legacy mode, neighbouring 3+3 shapes — Paraguay, Peru —
+  validate instead; filter by status). See ADR-0004 and ADR-0008.
 - A hung (but not dead) ffmpeg can stall the capture read; the reconnect loop covers
   crashes/exits, not wedged sockets.
 - No auth on the dashboard by design — LAN only (Q17).

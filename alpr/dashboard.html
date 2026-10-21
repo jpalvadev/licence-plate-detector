@@ -7,15 +7,15 @@
   table { border-collapse:collapse; width:100%; }
   th, td { border:1px solid #444; padding:3px 6px; font-size:12px; }
   thead th { background:#232323; }
-  .car { color:#6f6; } .legacy { color:#fc6; } .bad { color:#fa4; }
+  .car { color:#6f6; } .legacy { color:#fc6; }
 </style>
 
 <img class="stream" id="stream" src="/stream" alt="live stream">
 
 <h3>Events log</h3>
 <table id="log"><thead><tr>
-  <th>timestamp</th><th>plate</th><th>class</th><th>status</th><th>conf</th>
-</tr></thead><tbody id="tbody"><tr><td colspan="5">loading…</td></tr></tbody></table>
+  <th>timestamp</th><th>plate</th><th>status</th><th>conf</th>
+</tr></thead><tbody id="tbody"><tr><td colspan="4">loading…</td></tr></tbody></table>
 <a href="/plates.csv" download="events.csv">download events.csv</a>
 
 <script>
@@ -27,9 +27,8 @@ async function refreshLog() {
     const tbody = document.getElementById("tbody");
     tbody.innerHTML = last.map(line => {
       const c = line.split(",");
-      const cls = c[2] || "—", st = c[3];
-      const klass = st === "VALIDATED_CAR" ? "car" : st === "VALIDATED_LEGACY" ? "legacy" : "bad";
-      return `<tr class="${klass}">` + c.map((v,i) => `<td>${i === 4 ? Number(v).toFixed(2) : v}</td>`).join("") + "</tr>";
+      const klass = c[2] === "VALIDATED_LEGACY" ? "legacy" : "car"; // every logged row is validated (ADR-0009)
+      return `<tr class="${klass}">` + c.map((v,i) => `<td>${i === 3 ? Number(v).toFixed(2) : v}</td>`).join("") + "</tr>";
     }).join("");
   } catch (e) { /* server hiccup; next poll recovers */ }
 }

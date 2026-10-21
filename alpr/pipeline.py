@@ -105,12 +105,12 @@ class Pipeline:
         self._report_events(self.tracker.end_pass(timestamp))
         return overlays
 
-    def _report_events(self, closed: list[tuple[str, str, str, str, float]]) -> None:
+    def _report_events(self, closed: list[tuple[str, str, str, float]]) -> None:
         """Console feedback for Recognition events logged at close (via the tracker)."""
         if not closed:
             return
         with self._events_lock:
-            for ts, plate, _vehicle_class, status, conf in closed:
+            for ts, plate, status, conf in closed:
                 self._new_events.append(f"{ts} {plate} {status} {conf:.2f}")
 
     def new_events(self) -> list[str]:

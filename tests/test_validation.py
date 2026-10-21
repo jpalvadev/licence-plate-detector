@@ -29,7 +29,7 @@ class ClassifyTests(unittest.TestCase):
     def test_legacy_only_when_format_set_includes_it(self):
         # ADR-0008: MERCOSUR_ONLY (default) does not validate the legacy shape...
         self.assertIsNone(classify("ABC123"))
-        # ...MERCOSUR_PLUS_LEGACY does, and proves no vehicle class (car/cargo shared it).
+        # ...MERCOSUR_PLUS_LEGACY does — the verdict names a format, not a class (car/cargo shared it).
         self.assertEqual(classify("ABC123", include_legacy=True), "LEGACY")
 
     def test_rejects_bad_formats(self):
