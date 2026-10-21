@@ -119,7 +119,11 @@ class RtspCapture:
     def _run_forever(self) -> None:
         attempt = 0
         while True:
-            ok = self._stream_once()
+            try:
+                ok = self._stream_once()
+            except Exception:  # the capture thread must never die: log + keep reconnecting
+                LOGGER.exception("capture stream errored; treating as down")
+                ok = False
             self.offline = True
             self.offline_reason = "stream ended" if ok else "ffmpeg launch failed"
             delay = min(2.0**attempt, 15.0)
@@ -132,8 +136,8 @@ class RtspCapture:
         """Run ffmpeg until EOF; feed frames to the buffer. True if any frame came through."""
         w, h = self.settings.video_w, self.settings.video_h
         nbytes = w * h * 3
-        cmd = RtspReader.live_command(self.settings.rtsp_url, w, h)
         reader = RtspReader()
+        cmd = reader.live_command(self.settings.rtsp_url, w, h)
         try:
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)  # noqa: S1731
         except OSError as exc:
