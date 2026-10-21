@@ -1,0 +1,16 @@
+# Secrets / local config — never commit the real .env
+.env
+
+# Vendored ONNX weights are fetched by scripts/fetch_models.py (see docs/adr/0004)
+models/
+
+# Runtime artifacts
+events.csv
+debug_out/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

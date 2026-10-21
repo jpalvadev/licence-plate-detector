@@ -1,0 +1,3 @@
+# ONNX Runtime CPU as the single inference baseline
+
+The target is a Linux server with no GPU, so we chose ONNX Runtime `CPUExecutionProvider` as the one runtime for detection and OCR (with `OpenVINOExecutionProvider` attempted first when installed), instead of PyTorch/TorchScript or OpenCV DNN. This keeps deployment to a single lightweight runtime with no PyTorch/Ultralytics imports, honors the strict FOSS + CPU-only constraint, and pins the ≤300 ms/frame budget on ~4-core x86 (512×512 letterboxed detector input, 128×32 grayscale OCR crops). Swapping runtimes later would mean re-exporting and re-validating every model, so this is a lock-in choice worth recording.

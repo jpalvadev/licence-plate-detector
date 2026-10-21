@@ -1,0 +1,174 @@
+"""Live pipeline: capture frames, detection passes at DETECT_FPS, render stream at source FPS.
+
+Design (Q5/Q8/Q15/Q31): the capture thread fills a bounded drop-oldest buffer; the
+pipeline consumer runs detection+OCR only every ``1/DETECT_FPS`` seconds but renders a
+frame (reusing the overlays from the last detection pass) for every frame at the
+render scale, pushing JPEGs for the MJPEG stream.
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+import time
+from datetime import datetime, timezone
+
+import cv2
+import numpy as np
+
+from .config import Settings, parse_roi_center_in
+from .events import EventLog, EventTracker, STATUS_CAR, STATUS_MOTORCYCLE, STATUS_UNVALIDATED
+from .ingest import FrameBuffer, RtspCapture, RtspReader
+from .detector import PlateDetector
+from .ocr import PlateOcr
+from .validation import classify, normalize
+
+LOGGER = logging.getLogger(__name__)
+
+GREEN = (0, 200, 60)
+GREY = (140, 140, 140)
+
+
+class Overlay:
+    """A persisted sighting overlay: source-space box + rendered label + status."""
+
+    def __init__(self, x1: int, y1: int, x2: int, y2: int, label: str, validated: bool):
+        self.x1, self.y1, self.x2, self.y2 = x1, y1, x2, y2
+        self.label = label
+        self.validated = validated
+
+
+class Pipeline:
+    """Orchestrator for capture → detection passes → render stream + event log."""
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.rtsp = RtspCapture(settings)
+        self.detector = PlateDetector(settings.models_dir / f"{settings.detector_model}.onnx", settings.det_conf)
+        self.ocr = PlateOcr(settings.models_dir / f"{settings.ocr_model}.onnx")
+        self.log = EventLog(settings.events_csv)
+        self.tracker = EventTracker(self.log, settings.dedup_window_s)
+
+        self.jpeg_buffer = FrameBuffer(maxlen=15)
+        self.last_overlay: list[Overlay] = []
+        self.last_frame: np.ndarray | None = None
+        self.last_detect_mono = 0.0
+        self._new_events: list[str] = []
+        self._events_lock = threading.Lock()
+
+    def start(self) -> None:
+        self.rtsp.start()
+
+    def process_frame(self, frame: np.ndarray, timestamp: float) -> None:
+        """Render one frame; run a detection pass when its turn comes up."""
+        now_mono = time.monotonic()
+        interval = 1.0 / self.settings.detect_fps if self.settings.detect_fps > 0 else 0.0
+        if now_mono - self.last_detect_mono >= interval:
+            self.last_detect_mono = now_mono
+            self.last_overlay = self.detection_pass(frame)
+        rendered = self.render(frame)
+        jpg = cv2.imencode(".jpg", rendered, quality=self.settings.jpeg_quality)[1].tobytes()
+        self.jpeg_buffer.append(jpg)
+        self.last_frame = frame
+
+    def detection_pass(self, frame: np.ndarray, timestamp: float) -> list[Overlay]:
+        """Detection pass + ROI test + OCR + validation + dedup events. Returns overlays."""
+        settings = self.settings
+        h, w = frame.shape[:2]
+        iso_ts = datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone().isoformat(timespec="seconds")
+        overlays: list[Overlay] = []
+        for x1, y1, x2, y2, det_conf in self.detector.detect(frame):
+            cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            if not parse_roi_center_in(settings.roi, cx / w, cy / h):
+                continue
+            crop = self._crop(frame, (x1, y1, x2, y2))
+            if crop is None:
+                continue
+            raw, conf = self.ocr.recognize(crop)
+            if not raw:
+                continue
+            text = normalize(raw)
+            vehicle_class = classify(text)
+            created = self.tracker.record(
+                key=("V:" + text) if vehicle_class else ("U:" + text),
+                now=timestamp,
+                timestamp=iso_ts,
+                raw=raw,
+                confidence=conf,
+            )
+            if created:
+                with self._events_lock:
+                    self._new_events.append(f"{iso_ts} {text or '∅'} {vehicle_class or '-'} {conf:.2f}")
+            if vehicle_class:
+                status = STATUS_CAR if vehicle_class == "CAR" else STATUS_MOTORCYCLE
+                label = f"{text} {status} {conf:.0%}"
+                overlays.append(Overlay(x1, y1, x2, y2, label, True))
+            else:
+                overlays.append(Overlay(x1, y1, x2, y2, f"? {text}", False))
+        return overlays
+
+    def new_events(self) -> list[str]:
+        with self._events_lock:
+            drained = self._new_events
+            self._new_events = []
+            return drained
+
+    def take_jpegs(self) -> list[bytes]:
+        return self.jpeg_buffer.take()
+
+    def run(self) -> None:
+        """Main consumer loop (run in its own thread)."""
+        self.start()
+        offline_push_mono = 0.0
+        while True:
+            frames = self.rtsp.buffer.take()
+            if frames:
+                for frame, timestamp in frames:
+                    self.process_frame(frame, timestamp)
+                continue
+            time.sleep(0.01)
+            now_mono = time.monotonic()
+            if self.rtsp.offline and now_mono - offline_push_mono >= 0.25:
+                offline_push_mono = now_mono
+                self._push_offline_frame()
+
+    def _push_offline_frame(self) -> None:
+        """Keep the stream alive with a banner frame so browsers refresh + show offline."""
+        frame = self.last_frame
+        if frame is None:
+            s = self.settings
+            frame = np.zeros((s.video_h, s.video_w, 3), dtype=np.uint8)
+        rendered = self.render(frame, banner=self.rtsp.offline_reason)
+        jpg = cv2.imencode(".jpg", rendered, quality=self.settings.jpeg_quality)[1].tobytes()
+        self.jpeg_buffer.append(jpg)
+
+    def render(self, frame: np.ndarray, banner: str | None = None) -> np.ndarray:
+        """Downscale (design Q31: native source stays, stream is RENDER_WxRENDER_H)."""
+        settings = self.settings
+        out = cv2.resize(frame, (settings.render_w, settings.render_h), interpolation=cv2.INTER_AREA)
+        sx = settings.render_w / settings.video_w
+        sy = settings.render_h / settings.video_h
+        for ov in self.last_overlay:
+            color = GREEN if ov.validated else GREY
+            pt1 = (round(ov.x1 * sx), round(ov.y1 * sy))
+            pt2 = (round(ov.x2 * sx), round(ov.y2 * sy))
+            cv2.rectangle(out, pt1, pt2, color, 2)
+            size = max(0.45, min(0.8, (pt2[1] - pt1[1]) / 42.0))
+            cv2.putText(out, ov.label, (pt1[0], pt1[1] - 6), cv2.FONT_HERSHEY_SIMPLEX, size, color, 1, cv2.LINE_AA)
+        if banner:
+            text = f"STREAM OFFLINE ({banner})"
+            cv2.rectangle(out, (0, 0), (out.shape[1], 34), (30, 30, 30), -1)
+            cv2.putText(out, text, (12, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (240, 240, 240), 1, cv2.LINE_AA)
+        return out
+
+    def _crop(self, frame: np.ndarray, box: tuple[int, int, int, int], margin_frac: float = 0.03):
+        """Crop the plate box with a small margin; None when too small to read."""
+        h, w = frame.shape[:2]
+        x1, y1, x2, y2 = box
+        mx = max(2, round((x2 - x1) * margin_frac))
+        my = max(2, round((y2 - y1) * margin_frac))
+        x1c, y1c = max(0, x1 - mx), max(0, y1 - my)
+        x2c, y2c = min(w, x2 + mx), min(h, y2 + my)
+        if x2c - x1c < 10 or y2c - y1c < 6:
+            return None
+        return frame[y1c:y2c, x1c:x2c]

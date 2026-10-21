@@ -1,0 +1,38 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ALPR — Mercosur plates</title>
+<style>
+  body { background:#111; color:#ddd; font-family:monospace; margin:12px; }
+  img.stream { width:100%; border:1px solid #555; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { border:1px solid #444; padding:3px 6px; font-size:12px; }
+  thead th { background:#232323; }
+  .car { color:#6f6; } .moto { color:#6cf; } .bad { color:#fa4; }
+</style>
+
+<img class="stream" id="stream" src="/stream" alt="live stream">
+
+<h3>Events log</h3>
+<table id="log"><thead><tr>
+  <th>timestamp</th><th>plate</th><th>class</th><th>status</th><th>conf</th>
+</tr></thead><tbody id="tbody"><tr><td colspan="5">loading…</td></tr></tbody></table>
+<a href="/plates.csv" download="events.csv">download events.csv</a>
+
+<script>
+async function refreshLog() {
+  try {
+    const r = await fetch("/plates.csv?_=" + Date.now(), {cache:"no-store"});
+    const rows = (await r.text()).trim().split(/\r?\n/).slice(1);
+    const last = rows.slice(-15).reverse();
+    const tbody = document.getElementById("tbody");
+    tbody.innerHTML = last.map(line => {
+      const c = line.split(",");
+      const cls = c[2] || "—", st = c[3];
+      const klass = st === "UNVALIDATED" ? "bad" : (st === "VALIDATED_CAR" ? "car" : "moto");
+      return `<tr class="${klass}">` + c.map((v,i) => `<td>${i === 4 ? Number(v).toFixed(2) : v}</td>`).join("") + "</tr>";
+    }).join("");
+  } catch (e) { /* server hiccup; next poll recovers */ }
+}
+refreshLog();
+setInterval(refreshLog, 2000);
+</script>

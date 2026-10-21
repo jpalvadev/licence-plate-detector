@@ -1,0 +1,3 @@
+# MIT model stack instead of Ultralytics YOLO
+
+The project must be 100% free and open-source with no paid components, but Ultralytics YOLOv8/YOLO11 (the obvious choice for plate detection, and what the original spec suggested) are AGPL-3.0: using them — even just their exported weights — obligates the entire application and model files to an AGPL release, and any closed/business use requires a paid Enterprise license. We standardized instead on the MIT-licensed fast-alpr / fast-plate-ocr ecosystem (`yolo-v9-t-384-license-plate-end2end` detector and CCT/CRNN OCR models, with an Argentine-plates variant available), vendored as ONNX files in `models/`. Rejected alternatives: Ultralytics AGPL stack; training our own Ultralytics-based model (still AGPL-locked).
