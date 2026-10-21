@@ -1,5 +1,9 @@
 # Secrets / local config — never commit the real .env
 .env
+private.toml
+
+# Local sample footage (real plates) — never ships to git
+sample.mp4
 
 # Vendored ONNX weights are fetched by scripts/fetch_models.py (see docs/adr/0004)
 models/

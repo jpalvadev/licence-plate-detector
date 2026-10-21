@@ -57,3 +57,11 @@ _Avoid_: displayed frame, output frame
 **ROI**:
 A normalized rectangle on the source frame; sightings whose box center falls outside it are discarded. Default is the full frame.
 _Avoid_: crop, mask
+
+**Test rig**:
+A simulated camera on the dev machine: `sample.mp4` (gitignored, real plates) pushed on an infinite loop through a local mediamtx over RTSP, and read by the app exactly as it reads a real camera — same ingest thread, same ffmpeg pipe. Exercises the RTSP path without the server.
+_Avoid_: fake stream, demo, debug source
+
+**Private runbook**:
+`private.toml` at the repo root — the gitignored, machine-specific operational checklist (real endpoints, local commands, server paths). The public README carries only the generic, parameter-less version of the same procedure.
+_Avoid_: config (that's `.env`), .env.example

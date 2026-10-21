@@ -57,6 +57,8 @@ class RtspReader:
         return [
             self.ffmpeg_exe(),
             *self.FFMPEG_ARGS_COMMON,
+            "-rtsp_transport",
+            "tcp",
             "-i",
             rtsp_url,
             "-f",
