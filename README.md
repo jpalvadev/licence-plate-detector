@@ -95,7 +95,7 @@ pinned by checksum. Weights, `.env`, `events.csv` and sample footage never leave
 machine through git (see `.gitignore`).
 
 ```bat
-git clone https://github.com/<handle>/licence-plate-detector.git
+git clone https://github.com/jpalvadev/licence-plate-detector.git
 cd licence-plate-detector
 python -m venv .venv
 call .venv\Scripts\activate
