@@ -45,7 +45,7 @@ class LoadSettingsTests(unittest.TestCase):
             "RTSP_ENDPOINT", "RTSP_USER", "RTSP_PASS", "VIDEO_W", "VIDEO_H", "DETECT_FPS",
             "DEDUP_WINDOW_S", "EVENTS_CSV", "ROI", "DET_CONF_THRESH", "DETECTOR_MODEL",
             "OCR_MODEL", "HTTP_HOST", "HTTP_PORT", "RENDER_W", "RENDER_H", "JPEG_QUALITY",
-            "MODELS_DIR", "QUEUE_MAXLEN",
+            "MODELS_DIR", "QUEUE_MAXLEN", "PLATE_FORMATS",
         ]
         for key in keys:
             os.environ.pop(key, None)
@@ -65,6 +65,32 @@ class LoadSettingsTests(unittest.TestCase):
             self.assertEqual(settings.ocr_model, "cct_s_v2_global")
             self.assertEqual(settings.track_iou_thresh, 0.5)
             self.assertEqual(settings.track_max_misses, 2)
+
+    def test_plate_formats_default_is_mercosur_only(self):
+        keys = ["PLATE_FORMATS"]
+        for key in keys:
+            os.environ.pop(key, None)
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / ".env"
+            env_file.write_text("RTSP_ENDPOINT=cam.local:554/live\n", encoding="utf-8")
+            settings = load_settings(env_file)
+            self.assertFalse(settings.include_legacy)
+
+    def test_plate_formats_plus_legacy_enables(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / ".env"
+            env_file.write_text("RTSP_ENDPOINT=cam.local:554/live\nPLATE_FORMATS=MERCOSUR_PLUS_LEGACY\n", encoding="utf-8")
+            os.environ.pop("PLATE_FORMATS", None)
+            settings = load_settings(env_file)
+            self.assertTrue(settings.include_legacy)
+
+    def test_plate_formats_rejects_unknown_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / ".env"
+            env_file.write_text("RTSP_ENDPOINT=cam.local:554/live\nPLATE_FORMATS=BOTH\n", encoding="utf-8")
+            os.environ.pop("PLATE_FORMATS", None)
+            with self.assertRaises(ValueError):
+                load_settings(env_file)
 
     def test_requires_endpoint(self):
         for key in ["RTSP_ENDPOINT", "RTSP_USER", "RTSP_PASS"]:

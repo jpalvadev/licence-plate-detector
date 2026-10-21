@@ -1,21 +1,24 @@
-# Argentine Mercosur License Plate Detector (ALPR)
+# Argentine License Plate Detector (ALPR)
 
-Automatic license plate recognition for **Argentine Mercosur plates** from a single
+Automatic license plate recognition for **Argentine plates** from a single
 RTSP camera on a **CPU-only Windows server** (Python 3.12.7), 100% free & open source —
 no paid APIs, no cloud, no PyTorch, no Ultralytics runtime.
 
 Pipeline: **detect** (ONNX plate detector) → **OCR** (ONNX whole-plate reader) →
-**validate** against the two Argentine formats → **one event row per car pass**
+**validate** against the configured **format set** (`PLATE_FORMATS`, ADR-0008) → **one event row per car pass**
 (appended to a CSV; event identity is the plate track, not the plate string)
 and shown on a live **MJPEG web dashboard**.
 
 | Plate | Format | Example | Regex |
 |---|---|---|---|
-| Car | `AA 123 BB` | `AB 123 CD` | `^[A-Z]{2}[0-9]{3}[A-Z]{2}$` |
-| Motorcycle | `A 123 BCD` | `A 123 BCD` | `^[A-Z][0-9]{3}[A-Z]{3}$` |
+| Car (Mercosur, current) | `AB 123 CD` | `AB 123 CD` | `^[A-Z]{2}[0-9]{3}[A-Z]{2}$` |
+| Legacy car (1995–2016) | `ABC 123` | `ABC 123` | `^[A-Z]{3}[0-9]{3}$` — only with `PLATE_FORMATS=MERCOSUR_PLUS_LEGACY` |
 
-Alphabet is A–Z (no Ñ). Readings that match neither format are still logged —
-as `UNVALIDATED` rows — so they can be reviewed later.
+Alphabet is A–Z (no Ñ). Motorcycles are **out of the domain in either era** (ADR-0007) —
+their readings land as `UNVALIDATED` rows. So do readings that match no format in the
+format set: they are still logged as `UNVALIDATED`, reviewable later. With legacy mode on,
+neighbouring countries sharing the 3+3 shape (Paraguay, Peru) validate as `VALIDATED_LEGACY`
+noise — the status column keeps them filterable (ADR-0008).
 
 ## Architecture
 
@@ -36,7 +39,7 @@ RTSP camera ──ffmpeg(imageio-ffmpeg)──► capture thread ──► bound
 - If the RTSP stream dies, ffmpeg exits, the capture thread relaunches it with
   exponential backoff (capped at 15s) and the stream shows a `STREAM OFFLINE` banner.
   The server never crashes.
-- Full design rationale lives in `docs/adr/` (see ADR-0001…0004).
+- Full design rationale lives in `docs/adr/` (see ADR-0001…0008).
 
 ## Models & provenance
 
@@ -47,7 +50,7 @@ SHA-256 checksums) into the gitignored `models/` dir:
 |---|---|---|---|
 | `yolo-v9-t-384-license-plates-end2end.onnx` | detector (384×384, NMS in-graph) | 7.7 MB | [ankandrew/open-image-models](https://github.com/ankandrew/open-image-models) `assets` release |
 | `cct_s_v2_global.onnx` | OCR — default | 5.0 MB | [ankandrew/fast-plate-ocr](https://github.com/ankandrew/fast-plate-ocr) `arg-plates` release |
-| `arg_cnn_ocr.onnx` | OCR — fallback (Argentina-only, fixed 7 slots) | 7.6 MB | same release |
+| `arg_cnn_ocr.onnx` | OCR — fallback (Argentina-only, fixed 7 slots — keep with `MERCOSUR_ONLY`) | 7.6 MB | same release |
 
 **Verified benchmark** (upstream, Argentina plate set incl. Mercosur car +
 motorcycle): CCT-S v2 global scores **97.19% plate / 99.51% char** accuracy — the OCR
@@ -88,7 +91,8 @@ decoded plate, vehicle class, confidence, plus the tail of the events log.
 All tuning knobs are in `.env` (see `.env.example`): endpoint, credentials, ROI
 (normalized `left,top,right,bottom`), `DETECT_FPS`, `TRACK_IOU_THRESH` and
 `TRACK_MAX_MISSES` (plate-track association), `DEDUP_WINDOW_S` (exact-string
-guard only), model choice (`OCR_MODEL=cct_s_v2_global|arg_cnn_ocr`), render size, HTTP port.
+guard only), `PLATE_FORMATS` (format set: `MERCOSUR_ONLY|MERCOSUR_PLUS_LEGACY`, ADR-0008),
+model choice (`OCR_MODEL=cct_s_v2_global|arg_cnn_ocr`), render size, HTTP port.
 
 ## Deploying to another machine (step by step)
 
@@ -143,7 +147,7 @@ alpr/               package: config, ingest, detector, ocr, validation, events,
                     pipeline, server (+ dashboard.html)
 scripts/fetch_models.py                pinned-URL ONNX downloader with checksum verify
 models/                                gitignored ONNX weights
-docs/adr/                              decision records (model stack, runtime, CSV log, detector caveat, Windows/on-demand run)
+docs/adr/                              decision records (model stack, runtime, CSV log, detector caveat, Windows/on-demand run, plate domain + format set)
 docs/agents/, GLOSSARY.md              agent conventions + canonical vocabulary
 tests/                                 stdlib unittest suite
 ```
@@ -152,8 +156,10 @@ tests/                                 stdlib unittest suite
 
 - The **detector** is generic license-plate trained (all countries) — its bounding boxes
   are country-agnostic; Argentine-specificity comes from the **OCR** (CCT-S v2 global,
-  trained on the AR `arg-plates` set) plus the Mercosur regex validation, and false
-  detections from non-AR plates get filtered out as UNVALIDATED at worst. See ADR-0004.
+  trained on the AR `arg-plates` set) plus the regex validation of the configured format
+  set, and false detections from non-AR plates get filtered out as UNVALIDATED at worst
+  (in legacy mode, neighbouring 3+3 shapes — Paraguay, Peru — validate instead; filter by
+  status). See ADR-0004 and ADR-0008.
 - A hung (but not dead) ffmpeg can stall the capture read; the reconnect loop covers
   crashes/exits, not wedged sockets.
 - No auth on the dashboard by design — LAN only (Q17).

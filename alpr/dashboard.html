@@ -1,13 +1,13 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>ALPR — Mercosur plates</title>
+<title>ALPR — Argentine plates</title>
 <style>
   body { background:#111; color:#ddd; font-family:monospace; margin:12px; }
   img.stream { width:100%; border:1px solid #555; }
   table { border-collapse:collapse; width:100%; }
   th, td { border:1px solid #444; padding:3px 6px; font-size:12px; }
   thead th { background:#232323; }
-  .car { color:#6f6; } .moto { color:#6cf; } .bad { color:#fa4; }
+  .car { color:#6f6; } .legacy { color:#fc6; } .bad { color:#fa4; }
 </style>
 
 <img class="stream" id="stream" src="/stream" alt="live stream">
@@ -28,7 +28,7 @@ async function refreshLog() {
     tbody.innerHTML = last.map(line => {
       const c = line.split(",");
       const cls = c[2] || "—", st = c[3];
-      const klass = st === "UNVALIDATED" ? "bad" : (st === "VALIDATED_CAR" ? "car" : "moto");
+      const klass = st === "VALIDATED_CAR" ? "car" : st === "VALIDATED_LEGACY" ? "legacy" : "bad";
       return `<tr class="${klass}">` + c.map((v,i) => `<td>${i === 4 ? Number(v).toFixed(2) : v}</td>`).join("") + "</tr>";
     }).join("");
   } catch (e) { /* server hiccup; next poll recovers */ }

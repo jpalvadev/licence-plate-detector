@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from .events import EventLog, status_for
+from .events import EventLog, class_for, status_for
 from .validation import classify, normalize
 
 # IoU is computed on boxes dilated by this fraction of their own size on each side:
@@ -51,11 +51,12 @@ class PlateTracker:
     winning sighting).
     """
 
-    def __init__(self, log: EventLog, iou_thresh: float = 0.3, max_misses: int = 6, dedup_window_s: float = 10.0):
+    def __init__(self, log: EventLog, iou_thresh: float = 0.3, max_misses: int = 6, dedup_window_s: float = 10.0, include_legacy: bool = False):
         self.log = log
         self.iou_thresh = iou_thresh
         self.max_misses = max_misses
         self.dedup_window_s = dedup_window_s
+        self.include_legacy = include_legacy  # format set knob (ADR-0008): what counts as validated
         self.tracks: list[_Track] = []
         self.pass_index = 0
         self.closed_strings: dict[str, float] = {}
@@ -103,8 +104,8 @@ class PlateTracker:
             if text in self.closed_strings:
                 continue  # guard: same exact string already closed inside the window
             self.closed_strings[text] = now
-            vehicle_class = classify(text)
-            row = (self._iso(track.first_now), text, vehicle_class or "", status_for(vehicle_class or ""), confidence)
+            format_match = classify(text, include_legacy=self.include_legacy)
+            row = (self._iso(track.first_now), text, class_for(format_match or ""), status_for(format_match or ""), confidence)
             self.log.append(*row)
             rows.append(row)
         return rows
@@ -114,7 +115,7 @@ class PlateTracker:
         votes: dict[str, list[_Sighting]] = {}
         for sighting in track.sightings:
             votes.setdefault(sighting.text, []).append(sighting)
-        candidates = [t for t in votes if classify(t)] or list(votes)
+        candidates = [t for t in votes if classify(t, include_legacy=self.include_legacy)] or list(votes)
         winner = max(candidates, key=lambda t: (len(votes[t]), max(s.confidence for s in votes[t])))
         return winner, max(s.confidence for s in votes[winner])
 

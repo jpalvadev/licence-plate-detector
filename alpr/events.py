@@ -6,17 +6,26 @@ from pathlib import Path
 
 HEADER = ("timestamp", "plate", "vehicle_class", "status", "confidence")
 STATUS_CAR = "VALIDATED_CAR"
-STATUS_MOTORCYCLE = "VALIDATED_MOTORCYCLE"
+STATUS_LEGACY = "VALIDATED_LEGACY"
 STATUS_UNVALIDATED = "UNVALIDATED"
 
 
-def status_for(vehicle_class: str) -> str:
-    """Map a vehicle class (``validation.classify`` output) to an Events log status."""
-    if vehicle_class == "CAR":
+def status_for(format_match: str) -> str:
+    """Map a format match (``validation.classify`` output) to an Events log status."""
+    if format_match == "CAR":
         return STATUS_CAR
-    if vehicle_class == "MOTORCYCLE":
-        return STATUS_MOTORCYCLE
+    if format_match == "LEGACY":
+        return STATUS_LEGACY
     return STATUS_UNVALIDATED
+
+
+def class_for(format_match: str) -> str:
+    """Events log ``vehicle_class`` column: only the car format proves a class.
+
+    The legacy match is a format, not a class — car and cargo variants shared those
+    characters (ADR-0008) — so it leaves the column empty.
+    """
+    return format_match if format_match == "CAR" else ""
 
 
 class EventLog:

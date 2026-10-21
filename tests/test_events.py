@@ -7,7 +7,24 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from alpr.events import EventLog, HEADER
+from alpr.events import EventLog, HEADER, class_for, status_for, STATUS_CAR, STATUS_LEGACY, STATUS_UNVALIDATED
+
+
+class StatusTests(unittest.TestCase):
+    def test_status_for_maps_the_domain_statuses(self):
+        self.assertEqual(status_for("CAR"), STATUS_CAR)
+        self.assertEqual(status_for("LEGACY"), STATUS_LEGACY)
+        self.assertEqual(status_for(""), STATUS_UNVALIDATED)
+
+    def test_no_motorcycle_status(self):
+        # ADR-0007: motorcycles never enter the domain; the status set is three-valued.
+        self.assertNotIn("VALIDATED_MOTORCYCLE", (STATUS_CAR, STATUS_LEGACY, STATUS_UNVALIDATED))
+
+    def test_class_column_only_proven_by_car(self):
+        # ADR-0008: the legacy match names a format, not a class.
+        self.assertEqual(class_for("CAR"), "CAR")
+        self.assertEqual(class_for("LEGACY"), "")
+        self.assertEqual(class_for(""), "")
 
 
 class EventLogTests(unittest.TestCase):

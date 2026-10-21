@@ -1,7 +1,7 @@
 [project]
 name = "alpr"
 version = "0.1.0"
-description = "Automatic license plate recognition (ALPR) for Argentine Mercosur plates from a single RTSP camera — CPU-only, 100% FOSS ONNX stack."
+description = "Automatic license plate recognition (ALPR) for Argentine plates (Mercosur, plus an optional legacy format set) from a single RTSP camera — CPU-only, 100% FOSS ONNX stack."
 requires-python = ">=3.12"
 dependencies = [
   # Pinned stack (see docs/adr/0002-onnx-runtime-cpu-baseline.md): ONNX Runtime CPU baseline,

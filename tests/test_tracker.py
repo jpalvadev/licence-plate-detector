@@ -9,7 +9,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from alpr.events import STATUS_CAR, STATUS_UNVALIDATED, EventLog
+from alpr.events import STATUS_CAR, STATUS_LEGACY, STATUS_UNVALIDATED, EventLog
 from alpr.tracker import PlateTracker
 
 
@@ -203,6 +203,67 @@ class RecognitionConsensusTests(unittest.TestCase):
             self.assertEqual(
                 rows(log),
                 [[iso(1000.0), "517RP", "", STATUS_UNVALIDATED, "0.7000"]],
+            )
+
+
+class FormatSetTests(unittest.TestCase):
+    # The format set (ADR-0008) is one knob; the observable effect at this seam is
+    # which rows the SAME sightings produce.
+    def test_legacy_shape_is_unvalidated_under_mercosur_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = EventLog(Path(tmp) / "events.csv")
+            tracker = PlateTracker(log, iou_thresh=0.3, max_misses=3, dedup_window_s=10.0)
+            tracker.record(now=1000.0, box=(0, 0, 100, 30), raw="ABC 123", confidence=0.7)
+            for i in range(0, 5):
+                tracker.end_pass(now=1000.0 + i)
+            self.assertEqual(
+                rows(log),
+                [[iso(1000.0), "ABC123", "", STATUS_UNVALIDATED, "0.7000"]],
+            )
+
+    def test_legacy_row_under_plus_legacy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = EventLog(Path(tmp) / "events.csv")
+            tracker = PlateTracker(log, iou_thresh=0.3, max_misses=3, dedup_window_s=10.0, include_legacy=True)
+            tracker.record(now=1000.0, box=(0, 0, 100, 30), raw="ABC 123", confidence=0.7)
+            for i in range(0, 5):
+                tracker.end_pass(now=1000.0 + i)
+            self.assertEqual(
+                rows(log),
+                [[iso(1000.0), "ABC123", "", STATUS_LEGACY, "0.7000"]],  # class empty: characters prove no class
+            )
+
+    def test_consensus_prefers_validated_legacy_reading(self):
+        # Knob on: a legacy-shaped reading counts as validated for consensus, so it wins
+        # over a higher-confidence unvalidated sighting of the same track.
+        with tempfile.TemporaryDirectory() as tmp:
+            log = EventLog(Path(tmp) / "events.csv")
+            tracker = PlateTracker(log, iou_thresh=0.3, max_misses=3, dedup_window_s=10.0, include_legacy=True)
+            tracker.record(now=1000.0, box=(0, 0, 100, 30), raw="ABC12", confidence=0.9)
+            tracker.end_pass(now=1000.0)
+            tracker.record(now=1001.0, box=(2, 0, 102, 30), raw="ABC 123", confidence=0.4)
+            for i in range(1, 6):
+                tracker.end_pass(now=1000.0 + i)
+            self.assertEqual(
+                rows(log),
+                [[iso(1000.0), "ABC123", "", STATUS_LEGACY, "0.4000"]],
+            )
+
+    def test_mercosur_car_still_wins_over_legacy_shape(self):
+        # Knob on: a true Mercosur reading and a legacy-shaped misread of the same
+        # track are both validated; equal counts tie-break by confidence, so the
+        # higher-confidence sighting wins — deterministic, no special-casing.
+        with tempfile.TemporaryDirectory() as tmp:
+            log = EventLog(Path(tmp) / "events.csv")
+            tracker = PlateTracker(log, iou_thresh=0.3, max_misses=3, dedup_window_s=10.0, include_legacy=True)
+            tracker.record(now=1000.0, box=(0, 0, 100, 30), raw="AB123CD", confidence=0.5)
+            tracker.end_pass(now=1000.0)
+            tracker.record(now=1001.0, box=(2, 0, 102, 30), raw="ABC123", confidence=0.4)
+            for i in range(1, 6):
+                tracker.end_pass(now=1000.0 + i)
+            self.assertEqual(
+                rows(log),
+                [[iso(1000.0), "AB123CD", "CAR", STATUS_CAR, "0.5000"]],
             )
 
 

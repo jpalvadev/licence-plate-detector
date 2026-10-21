@@ -53,6 +53,7 @@ class Pipeline:
             iou_thresh=settings.track_iou_thresh,
             max_misses=settings.track_max_misses,
             dedup_window_s=settings.dedup_window_s,
+            include_legacy=settings.include_legacy,
         )
 
         self.jpeg_buffer = FrameBuffer(maxlen=15)
@@ -94,9 +95,9 @@ class Pipeline:
                 continue
             self.tracker.record(now=timestamp, box=(x1, y1, x2, y2), raw=raw, confidence=conf)
             text = normalize(raw)
-            vehicle_class = classify(text)
-            if vehicle_class:
-                status = status_for(vehicle_class)
+            format_match = classify(text, include_legacy=settings.include_legacy)
+            if format_match:
+                status = status_for(format_match)
                 label = f"{text} {status} {conf:.0%}"
                 overlays.append(Overlay(x1, y1, x2, y2, label, True))
             else:

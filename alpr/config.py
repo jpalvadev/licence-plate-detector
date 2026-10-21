@@ -22,6 +22,7 @@ class Settings:
     dedup_window_s: float
     track_iou_thresh: float
     track_max_misses: int
+    include_legacy: bool
     events_csv: Path
     roi: tuple[float, float, float, float]
     det_conf: float
@@ -53,6 +54,7 @@ def load_settings(env_path: Path = Path(".env"), *, require_endpoint: bool = Tru
         dedup_window_s=_float("DEDUP_WINDOW_S", 10.0),
         track_iou_thresh=_float("TRACK_IOU_THRESH", 0.3),
         track_max_misses=_int("TRACK_MAX_MISSES", 6),
+        include_legacy=_plate_formats("PLATE_FORMATS", "MERCOSUR_ONLY"),
         events_csv=Path(os.environ.get("EVENTS_CSV", "events.csv")),
         roi=_roi(os.environ.get("ROI", "")),
         det_conf=_float("DET_CONF_THRESH", 0.4),
@@ -76,6 +78,17 @@ def _int(name: str, default: int) -> int:
 def _float(name: str, default: float) -> float:
     raw = os.environ.get(name, "").strip()
     return float(raw) if raw else default
+
+
+def _plate_formats(name: str, default: str) -> bool:
+    """``PLATE_FORMATS`` enum (ADR-0008) → whether the format set includes legacy cars."""
+    raw = os.environ.get(name, "").strip() or default
+    if raw == "MERCOSUR_ONLY":
+        return False
+    if raw == "MERCOSUR_PLUS_LEGACY":
+        return True
+    msg = f"PLATE_FORMATS must be MERCOSUR_ONLY or MERCOSUR_PLUS_LEGACY (got {raw!r})"
+    raise ValueError(msg)
 
 
 def _roi(text: str) -> tuple[float, float, float, float]:

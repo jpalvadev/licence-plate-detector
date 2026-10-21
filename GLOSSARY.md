@@ -1,21 +1,19 @@
 # Automatic License Plate Recognition (ALPR)
 
-Argentine Mercosur-plate recognition from a single RTSP camera on a CPU-only server: plates are located, read, validated against the two Argentine formats, and deduplicated into events that are displayed and exported.
+Argentine plate recognition from a single RTSP camera on a CPU-only server: plates are located, read, validated against a configured format set, and deduplicated into events that are displayed and exported.
 
 ## Language
 
 **Mercosur plate**:
-A seven-character Argentine identification plate. The registration domain is four letters and three digits; the arrangement on the physical plate differs by vehicle class.
+A seven-character Argentine identification plate of the current (Mercosur) era, arranged `AB 123 CD` (two letters, three digits, two letters).
 _Avoid_: license plate, chapa
 
-**Car plate**:
-A Mercosur plate for an automotor, arranged `AA 123 BB` (two letters, three digits, two letters).
-
-**Motorcycle plate**:
-A Mercosur plate for a motovehículo, arranged `A 123 BCD` (one letter, three digits, three letters).
+**Legacy plate**:
+A six-character Argentine identification plate of the 1995–2016 era, arranged `ABC 123` (three letters, three digits) — superseded by Mercosur plates only for new registrations from April 2016, so they remain common on older vehicles. Whether legacy plates are in play at all is set by the format set, not by the camera. It carries no vehicle class in its characters (in that era car and cargo variants shared the same characters).
+_Avoid_: old plate, old format
 
 **Vehicle class**:
-The car-or-motorcycle category of a plate, derived from which format its string matches. The class is a property of the plate string itself, never of the camera or the vehicle pixels.
+The category a plate string proves about the vehicle: only the car format proves CAR. Nothing else — not the legacy format, not any other string — proves a class. The class is a property of the plate string itself, never of the camera or the vehicle pixels. Motorcycles are out of the domain: the operator's site does not care for them in either era.
 _Avoid_: type, kind
 
 **Sighting**:
@@ -27,11 +25,11 @@ The text the OCR produces for a sighting, before normalization — may contain s
 _Avoid_: text, output
 
 **Validated plate**:
-A raw reading after normalization (uppercased, separators stripped) that matches the car or motorcycle format exactly. A track's event row is validated when its consensus reading is a validated plate.
+A raw reading after normalization (uppercased, separators stripped) that matches one of the formats in the format set exactly. A track's event row is validated when its consensus reading is a validated plate.
 _Avoid_: clean text, valid string
 
 **Unvalidated reading**:
-A raw reading that does not match either format after normalization. Its sightings join the same plate track as better readings of the same box; only if the track's whole consensus comes out unvalidated is the event logged with status `UNVALIDATED` (plurality raw reading), so it can be reviewed against the recording later.
+A raw reading that matches no format in the format set after normalization. Its sightings join the same plate track as better readings of the same box; only if the track's whole consensus comes out unvalidated is the event logged with status `UNVALIDATED` (plurality raw reading), so it can be reviewed against the recording later.
 _Avoid_: failed OCR, garbage
 
 **Recognition event**:
@@ -57,6 +55,9 @@ _Avoid_: processed frame
 **Render frame**:
 A frame of the displayed output stream (full source ~10 FPS). Its overlays come from the last detection pass; boxes persist between passes.
 _Avoid_: displayed frame, output frame
+
+**Format set**:
+The startup choice of which plate formats are validatable: the Mercosur car format alone, or that plus the legacy car format (motorcycles are out of the domain, ADR-0007). A domain decision, not a code fork: the same detection, tracking and event machinery runs under either setting.
 
 **ROI**:
 A normalized rectangle on the source frame; sightings whose box center falls outside it are discarded. Default is the full frame.
