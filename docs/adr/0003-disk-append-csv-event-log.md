@@ -1,3 +1,5 @@
 # Append-only CSV on disk as the event log (no SQLite, no JSON API)
 
 A "production-ready" ALPR app would usually get a database, but the consumer here is a human reviewing the log against the camera recording and a frontend that just displays timestamps on demand — so the Recognition events are appended as one CSV row **at event creation** (first-sighting timestamp, status, confidence, never rewritten) to an env-configured `EVENTS_CSV` path, opened in append mode so history survives restarts, and served raw at `GET /plates.csv`. Unvalidated readings get `UNVALIDATED` rows too, deduped by normalized raw text. Rejected: SQLite + JSON API (over-engineered for v1), in-memory-only log (lost on restart — user needs history across restarts), one-row-per-raw-sighting (duplicate spam at 3 FPS).
+
+> Note: superseded in part by ADR-0009 — `UNVALIDATED` rows no longer exist; only plates matching an active format are logged.

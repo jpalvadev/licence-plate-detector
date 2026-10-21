@@ -29,7 +29,7 @@ RTSP camera ──ffmpeg(imageio-ffmpeg)──► capture thread ──► bound
                                         pipeline thread ◄─────┘
                      detection+OCR every 1/DETECT_FPS (default 3 FPS) │ render every frame
                                         │                                     ▼
-                        plate tracker (one row per track)        JPEG buffer ──► /stream (MJPEG @960×540)
+                        plate tracker (one row per validated track)  JPEG buffer ──► /stream (MJPEG @960×540)
                                         ▼
                               events.csv (append-only) ──► GET /plates.csv + dashboard
 ```
@@ -138,7 +138,7 @@ trigger the `STREAM OFFLINE` banner and the reconnect/backoff ladder, not a cras
 ## Development
 
 ```bash
-python -m unittest discover -s tests   # validation / events / config unit tests
+python -m unittest discover -s tests   # validation / events / config / tracker unit tests
 ```
 
 ## Repo layout

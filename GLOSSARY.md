@@ -9,7 +9,7 @@ A seven-character Argentine identification plate of the current (Mercosur) era, 
 _Avoid_: license plate, chapa
 
 **Legacy plate**:
-A six-character Argentine identification plate of the 1995–2016 era, arranged `ABC 123` (three letters, three digits) — superseded by Mercosur plates only for new registrations from April 2016, so they remain common on older vehicles. Whether legacy plates are in play at all is set by the format set, not by the camera. It carries no vehicle class in its characters (in that era car and cargo variants shared the same characters).
+A six-character Argentine identification plate of the 1995–2016 era, arranged `ABC 123` (three letters, three digits) — superseded by Mercosur plates only for new registrations from April 2016, so they remain common on older vehicles. Whether legacy plates are in play at all is set by the format set, not by the camera. Nothing about the vehicle itself can be read off its characters (in that era car and cargo variants shared the same characters).
 _Avoid_: old plate, old format
 
 **Sighting**:

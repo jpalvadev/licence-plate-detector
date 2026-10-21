@@ -1,4 +1,4 @@
-"""Raw reading → normalized text → Vehicle class (design Q9; format set per ADR-0008).
+"""Raw reading → normalized text → format match (design Q9; format set per ADR-0008).
 
 Normalization: uppercase, strip spaces/dashes/underscores. The car format is tried
 first; the legacy car format is tried only when the format set includes it.
