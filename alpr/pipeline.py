@@ -17,7 +17,8 @@ import cv2
 import numpy as np
 
 from .config import Settings, parse_roi_center_in
-from .events import EventLog, EventTracker, STATUS_CAR, STATUS_MOTORCYCLE, STATUS_UNVALIDATED
+from .events import EventLog, status_for
+from .tracker import PlateTracker
 from .ingest import FrameBuffer, RtspCapture, RtspReader
 from .detector import PlateDetector
 from .ocr import PlateOcr
@@ -47,7 +48,12 @@ class Pipeline:
         self.detector = PlateDetector(settings.models_dir / f"{settings.detector_model}.onnx", settings.det_conf)
         self.ocr = PlateOcr(settings.models_dir / f"{settings.ocr_model}.onnx")
         self.log = EventLog(settings.events_csv)
-        self.tracker = EventTracker(self.log, settings.dedup_window_s)
+        self.tracker = PlateTracker(
+            self.log,
+            iou_thresh=settings.track_iou_thresh,
+            max_misses=settings.track_max_misses,
+            dedup_window_s=settings.dedup_window_s,
+        )
 
         self.jpeg_buffer = FrameBuffer(maxlen=15)
         self.last_overlay: list[Overlay] = []
@@ -72,10 +78,9 @@ class Pipeline:
         self.last_frame = frame
 
     def detection_pass(self, frame: np.ndarray, timestamp: float) -> list[Overlay]:
-        """Detection pass + ROI test + OCR + validation + dedup events. Returns overlays."""
+        """Detection pass + ROI test + OCR + validation + tracker feed. Returns overlays."""
         settings = self.settings
         h, w = frame.shape[:2]
-        iso_ts = datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone().isoformat(timespec="seconds")
         overlays: list[Overlay] = []
         for x1, y1, x2, y2, det_conf in self.detector.detect(frame):
             cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
@@ -87,25 +92,25 @@ class Pipeline:
             raw, conf = self.ocr.recognize(crop)
             if not raw:
                 continue
+            self.tracker.record(now=timestamp, box=(x1, y1, x2, y2), raw=raw, confidence=conf)
             text = normalize(raw)
             vehicle_class = classify(text)
-            created = self.tracker.record(
-                key=("V:" + text) if vehicle_class else ("U:" + text),
-                now=timestamp,
-                timestamp=iso_ts,
-                raw=raw,
-                confidence=conf,
-            )
-            if created:
-                with self._events_lock:
-                    self._new_events.append(f"{iso_ts} {text or '∅'} {vehicle_class or '-'} {conf:.2f}")
             if vehicle_class:
-                status = STATUS_CAR if vehicle_class == "CAR" else STATUS_MOTORCYCLE
+                status = status_for(vehicle_class)
                 label = f"{text} {status} {conf:.0%}"
                 overlays.append(Overlay(x1, y1, x2, y2, label, True))
             else:
                 overlays.append(Overlay(x1, y1, x2, y2, f"? {text}", False))
+        self._report_events(self.tracker.end_pass(timestamp))
         return overlays
+
+    def _report_events(self, closed: list[tuple[str, str, str, str, float]]) -> None:
+        """Console feedback for Recognition events logged at close (via the tracker)."""
+        if not closed:
+            return
+        with self._events_lock:
+            for ts, plate, _vehicle_class, status, conf in closed:
+                self._new_events.append(f"{ts} {plate} {status} {conf:.2f}")
 
     def new_events(self) -> list[str]:
         with self._events_lock:
@@ -120,17 +125,23 @@ class Pipeline:
         """Main consumer loop (run in its own thread)."""
         self.start()
         offline_push_mono = 0.0
+        offline_flushed = False
         while True:
             frames = self.rtsp.buffer.take()
             if frames:
                 for frame, timestamp in frames:
                     self.process_frame(frame, timestamp)
+                offline_flushed = False
                 continue
             time.sleep(0.01)
             now_mono = time.monotonic()
-            if self.rtsp.offline and now_mono - offline_push_mono >= 0.25:
-                offline_push_mono = now_mono
-                self._push_offline_frame()
+            if self.rtsp.offline:
+                if not offline_flushed:  # stream died: log what is still open (ADR-0006)
+                    offline_flushed = True
+                    self._report_events(self.tracker.flush(time.time()))
+                if now_mono - offline_push_mono >= 0.25:
+                    offline_push_mono = now_mono
+                    self._push_offline_frame()
 
     def _push_offline_frame(self) -> None:
         """Keep the stream alive with a banner frame so browsers refresh + show offline."""

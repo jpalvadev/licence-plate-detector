@@ -27,23 +27,27 @@ The text the OCR produces for a sighting, before normalization — may contain s
 _Avoid_: text, output
 
 **Validated plate**:
-A raw reading after normalization (uppercased, separators stripped) that matches the car or motorcycle format exactly. Only validated plates become events.
+A raw reading after normalization (uppercased, separators stripped) that matches the car or motorcycle format exactly. A track's event row is validated when its consensus reading is a validated plate.
 _Avoid_: clean text, valid string
 
 **Unvalidated reading**:
-A raw reading that does not match either format after normalization. Its sightings still form a deduplicated event (keyed by normalized raw text, carrying no Vehicle class), drawn as a grey box and logged with status `UNVALIDATED` so it can be reviewed against the recording later.
+A raw reading that does not match either format after normalization. Its sightings join the same plate track as better readings of the same box; only if the track's whole consensus comes out unvalidated is the event logged with status `UNVALIDATED` (plurality raw reading), so it can be reviewed against the recording later.
 _Avoid_: failed OCR, garbage
 
 **Recognition event**:
-One occurrence of a plate: the same validated plate string sighted again within the dedup window extends the existing event (its confidence may improve) rather than creating a new one. Reappearance after the window starts a new event.
-_Avoid_: detection, log entry, record
+One occurrence of a physical plate, bounded by a plate track rather than by a string: consecutive detections of the same box in motion belong to one event regardless of what the OCR read on each pass. An event yields exactly one row in the Events log, carrying the plurality reading of its sightings (ties → higher confidence). Reappearance of a plate after the event closed is a new event.
+_Avoid_: detection, log entry, record, sighting
+
+**Plate track**:
+The spatial continuity of a plate across detection passes: a sighting whose box matches an open track's box from a previous pass extends that track; an unmatched sighting opens a new one. A track tolerates a few consecutive passes where the plate was not detected; exceeding that tolerance closes it, and so does stream loss. One closed track = one Recognition event.
+_Avoid_: tracker (that's the mechanism), blob, detection chain
 
 **Events log**:
-The append-only CSV record of Recognition events — one row written the moment an event is created (first-sighting timestamp, status `VALIDATED_CAR` / `VALIDATED_MOTORCYCLE` / `UNVALIDATED`, confidence). Survives restarts; served to the frontend on demand.
+The append-only CSV record of Recognition events — one row written when an event **closes**, carrying the event's consensus reading over all its sightings (not the first sighting's reading). Survives restarts; served to the frontend on demand.
 _Avoid_: event buffer, history file
 
 **Dedup window**:
-The rolling time interval (default 10 s) inside which the same validated plate string maps to a single Recognition event.
+The rolling time interval (default 10 s) whose only remaining role is a guard: once a Recognition event has closed with a given plate string, sightings producing that exact string within the window add no new Events log row (they belong to the same occurrence or a split track of it).
 _Avoid_: cooldown, TTL
 
 **Detection pass**:

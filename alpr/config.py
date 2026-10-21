@@ -20,6 +20,8 @@ class Settings:
     video_h: int
     detect_fps: float
     dedup_window_s: float
+    track_iou_thresh: float
+    track_max_misses: int
     events_csv: Path
     roi: tuple[float, float, float, float]
     det_conf: float
@@ -49,6 +51,8 @@ def load_settings(env_path: Path = Path(".env"), *, require_endpoint: bool = Tru
         video_h=_int("VIDEO_H", 1080),
         detect_fps=_float("DETECT_FPS", 3.0),
         dedup_window_s=_float("DEDUP_WINDOW_S", 10.0),
+        track_iou_thresh=_float("TRACK_IOU_THRESH", 0.3),
+        track_max_misses=_int("TRACK_MAX_MISSES", 6),
         events_csv=Path(os.environ.get("EVENTS_CSV", "events.csv")),
         roi=_roi(os.environ.get("ROI", "")),
         det_conf=_float("DET_CONF_THRESH", 0.4),

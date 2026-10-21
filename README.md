@@ -5,7 +5,8 @@ RTSP camera on a **CPU-only Windows server** (Python 3.12.7), 100% free & open s
 no paid APIs, no cloud, no PyTorch, no Ultralytics runtime.
 
 Pipeline: **detect** (ONNX plate detector) → **OCR** (ONNX whole-plate reader) →
-**validate** against the two Argentine formats → **dedup events** appended to a CSV
+**validate** against the two Argentine formats → **one event row per car pass**
+(appended to a CSV; event identity is the plate track, not the plate string)
 and shown on a live **MJPEG web dashboard**.
 
 | Plate | Format | Example | Regex |
@@ -24,7 +25,7 @@ RTSP camera ──ffmpeg(imageio-ffmpeg)──► capture thread ──► bound
                                         pipeline thread ◄─────┘
                      detection+OCR every 1/DETECT_FPS (default 3 FPS) │ render every frame
                                         │                                     ▼
-                              event tracker (dedup 10s)          JPEG buffer ──► /stream (MJPEG @960×540)
+                        plate tracker (one row per track)        JPEG buffer ──► /stream (MJPEG @960×540)
                                         ▼
                               events.csv (append-only) ──► GET /plates.csv + dashboard
 ```
@@ -85,8 +86,9 @@ decoded plate, vehicle class, confidence, plus the tail of the events log.
 `GET /plates.csv` serves the raw CSV for download.
 
 All tuning knobs are in `.env` (see `.env.example`): endpoint, credentials, ROI
-(normalized `left,top,right,bottom`), `DETECT_FPS`, `DEDUP_WINDOW_S`, model choice
-(`OCR_MODEL=cct_s_v2_global|arg_cnn_ocr`), render size, HTTP port.
+(normalized `left,top,right,bottom`), `DETECT_FPS`, `TRACK_IOU_THRESH` and
+`TRACK_MAX_MISSES` (plate-track association), `DEDUP_WINDOW_S` (exact-string
+guard only), model choice (`OCR_MODEL=cct_s_v2_global|arg_cnn_ocr`), render size, HTTP port.
 
 ## Deploying to another machine (step by step)
 

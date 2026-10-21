@@ -53,7 +53,7 @@ class LoadSettingsTests(unittest.TestCase):
             env_file = Path(tmp) / ".env"
             env_file.write_text(
                 "RTSP_ENDPOINT=cam.local:554/live\nRTSP_USER=u1\nRTSP_PASS=s e@cret\n"
-                "DETECT_FPS=2\nROI=0.1,0.2,0.9,0.8\nHTTP_PORT=9000\n",
+                "DETECT_FPS=2\nROI=0.1,0.2,0.9,0.8\nHTTP_PORT=9000\nTRACK_IOU_THRESH=0.5\nTRACK_MAX_MISSES=2\n",
                 encoding="utf-8",
             )
             settings = load_settings(env_file)
@@ -63,16 +63,21 @@ class LoadSettingsTests(unittest.TestCase):
             self.assertEqual(settings.roi, (0.1, 0.2, 0.9, 0.8))
             self.assertEqual(settings.http_port, 9000)
             self.assertEqual(settings.ocr_model, "cct_s_v2_global")
+            self.assertEqual(settings.track_iou_thresh, 0.5)
+            self.assertEqual(settings.track_max_misses, 2)
 
     def test_requires_endpoint(self):
         for key in ["RTSP_ENDPOINT", "RTSP_USER", "RTSP_PASS"]:
             os.environ.pop(key, None)
         with tempfile.TemporaryDirectory() as tmp:
-            empty = Path(tmp) / ".env"
+            # Hermetic: an existing, endpoint-free env file (dotenv discovery from a test
+            # file under the repo root would otherwise pick up the operator's real .env).
+            env_file = Path(tmp) / "blank.env"
+            env_file.write_text("VIDEO_W=1920\n", encoding="utf-8")
             with self.assertRaises(ValueError):
-                load_settings(empty)
+                load_settings(env_file)
             # Debug mode tolerates a missing endpoint (require_endpoint=False).
-            settings = load_settings(empty, require_endpoint=False)
+            settings = load_settings(env_file, require_endpoint=False)
             self.assertEqual(settings.rtsp_url, "rtsp://")
 
 
