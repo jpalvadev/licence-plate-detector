@@ -99,7 +99,9 @@ class Pipeline:
             # ADR-0011: the artifact keeps a CONTEXT crop (MEDIA_PAD margin) so the
             # photo can show the vehicle; OCR above stays on the tight crop (Q4/Q17
             # accuracy ground — argmax pixels only).
-            artifact = context_crop(frame, (x1, y1, x2, y2), settings.media_pad) or crop
+            artifact = context_crop(frame, (x1, y1, x2, y2), settings.media_pad)
+            if artifact is None:  # degenerate grown box: fall back to the OCR crop
+                artifact = crop
             self.tracker.record(
                 now=timestamp, box=(x1, y1, x2, y2), raw=raw, confidence=conf, crop=artifact
             )
