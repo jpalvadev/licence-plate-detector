@@ -58,7 +58,7 @@ def load_settings(env_path: Path = Path(".env"), *, require_endpoint: bool = Tru
         events_csv=Path(os.environ.get("EVENTS_CSV", "events.csv")),
         roi=_roi(os.environ.get("ROI", "")),
         det_conf=_float("DET_CONF_THRESH", 0.4),
-        detector_model=os.environ.get("DETECTOR_MODEL", "yolo-v9-t-384-license-plates-end2end").strip(),
+        detector_model=os.environ.get("DETECTOR_MODEL", "yolo-v9-s-608-license-plates-end2end").strip(),
         ocr_model=os.environ.get("OCR_MODEL", "cct_s_v2_global").strip(),
         http_host=os.environ.get("HTTP_HOST", "0.0.0.0").strip(),
         http_port=_int("HTTP_PORT", 8080),

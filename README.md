@@ -49,9 +49,24 @@ SHA-256 checksums) into the gitignored `models/` dir:
 
 | Model | Role | Size | Source (MIT repos) |
 |---|---|---|---|
-| `yolo-v9-t-384-license-plates-end2end.onnx` | detector (384×384, NMS in-graph) | 7.7 MB | [ankandrew/open-image-models](https://github.com/ankandrew/open-image-models) `assets` release |
-| `cct_s_v2_global.onnx` | OCR — default | 5.0 MB | [ankandrew/fast-plate-ocr](https://github.com/ankandrew/fast-plate-ocr) `arg-plates` release |
-| `arg_cnn_ocr.onnx` | OCR — fallback (Argentina-only, fixed 7 slots — keep with `MERCOSUR_ONLY`) | 7.6 MB | same release |
+| `yolo-v9-s-608-license-plates-end2end.onnx` | detector — **default** (608×608, NMS in-graph) | 28.6 MB | [ankandrew/open-image-models](https://github.com/ankandrew/open-image-models) `assets` release |
+| `yolo-v9-t-{640,512,416,384,256}-license-plates-end2end.onnx` | detector tiers — swap via `DETECTOR_MODEL` (ADR-0010) | 7.8 MB each | same release |
+| `cct_s_v2_global.onnx` | OCR — default | 5.3 MB | [ankandrew/fast-plate-ocr](https://github.com/ankandrew/fast-plate-ocr) `arg-plates` release |
+| `cct_{xs_v2,s_v1,xs_v1}_global.onnx` | OCR siblings — swap via `OCR_MODEL` (ADR-0010) | 2.1–7.6 MB | same release |
+| `arg_cnn_ocr.onnx` | OCR — fallback (Argentina-only, fixed 7 slots — keep with `MERCOSUR_ONLY`) | 8.0 MB | same release |
+
+**Verified benchmark** (upstream, Argentina plate set incl. Mercosur car +
+motorcycle): CCT-S v2 global scores **97.19% plate / 99.51% char** accuracy — the OCR
+is genuinely trained on the newer Argentine Mercosur plates. Its three zoo siblings all
+measure lower (97.5/97.4/96.0% plate acc), so the default stands.
+
+**Detector tiers (ADR-0010):** the accuracy upgrade path under the CPU-only / no-fine-tuning
+constraints is the input-size tier, not the architecture. `s-608` (mAP50-95 **0.772** vs
+0.687 for the old `t-384`) is the default: ~101 ms/pass measured on the dev CPU — still ~10
+inferences/s against the 3 FPS budget — and on an identical 100 s `sample3.mp4` Test-rig
+window it logged 16 events / **15 distinct plate strings** vs `t-384`'s 16 / 10 (full model-vs-model
+tables: [BENCHMARK.md](BENCHMARK.md)). Every tier stays `.env`-switchable with its accuracy/size/
+latency annotated in `.env.example`; step down to `t-640` if the real server CPU starves.
 
 **Verified benchmark** (upstream, Argentina plate set incl. Mercosur car +
 motorcycle): CCT-S v2 global scores **97.19% plate / 99.51% char** accuracy — the OCR
@@ -93,7 +108,7 @@ All tuning knobs are in `.env` (see `.env.example`): endpoint, credentials, ROI
 (normalized `left,top,right,bottom`), `DETECT_FPS`, `TRACK_IOU_THRESH` and
 `TRACK_MAX_MISSES` (plate-track association), `DEDUP_WINDOW_S` (exact-string
 guard only), `PLATE_FORMATS` (format set: `MERCOSUR_ONLY|MERCOSUR_PLUS_LEGACY`, ADR-0008),
-model choice (`OCR_MODEL=cct_s_v2_global|arg_cnn_ocr`), render size, HTTP port.
+model choice (`DETECTOR_MODEL` — any zoo tier, ADR-0010; `OCR_MODEL=cct_s_v2_global|cct_xs_v2_global|cct_s_v1_global|cct_xs_v1_global|arg_cnn_ocr`), render size, HTTP port.
 
 ## Deploying to another machine (step by step)
 
@@ -147,8 +162,9 @@ python -m unittest discover -s tests   # validation / events / config / tracker 
 alpr/               package: config, ingest, detector, ocr, validation, events,
                     pipeline, server (+ dashboard.html)
 scripts/fetch_models.py                pinned-URL ONNX downloader with checksum verify
+BENCHMARK.md                           measured model-vs-model tables (Test rig on sample3.mp4)
 models/                                gitignored ONNX weights
-docs/adr/                              decision records (model stack, runtime, CSV log, detector caveat, Windows/on-demand run, plate domain + format set, validated-only event log)
+docs/adr/                              decision records (model stack, runtime, CSV log, detector caveat, Windows/on-demand run, plate domain + format set, validated-only event log, PoC detector-tier upgrade)
 docs/agents/, GLOSSARY.md              agent conventions + canonical vocabulary
 tests/                                 stdlib unittest suite
 ```
