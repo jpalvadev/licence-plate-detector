@@ -117,7 +117,8 @@ model choice (`DETECTOR_MODEL` — any zoo tier, ADR-0010; `OCR_MODEL=cct_s_v2_g
 
 ## Deploying to another machine (step by step)
 
-Nothing is copied by hand except the ONNX weights, which the fetch script re-downloads
+Full printable checklist with prerequisites, offline fallback and troubleshooting:
+**[DEPLOY.md](DEPLOY.md)**. Nothing is copied by hand except the ONNX weights, which the fetch script re-downloads
 pinned by checksum. Weights, `.env`, `events.csv` and sample footage never leave a
 machine through git (see `.gitignore`).
 
@@ -168,6 +169,7 @@ alpr/               package: config, ingest, detector, ocr, validation, events,
                     clarity, media, pipeline, server (+ dashboard.html)
 scripts/fetch_models.py                pinned-URL ONNX downloader with checksum verify
 BENCHMARK.md                           measured model-vs-model tables (Test rig on sample3.mp4)
+DEPLOY.md                              full Windows deployment checklist (step by step)
 models/                                gitignored ONNX weights
 docs/adr/                              decision records (model stack, runtime, CSV log, detector caveat, Windows/on-demand run, plate domain + format set, validated-only event log, PoC detector-tier upgrade)
 docs/agents/, GLOSSARY.md              agent conventions + canonical vocabulary
