@@ -89,6 +89,7 @@ notepad .env
 | `DETECT_FPS` | 3 default | CPU budget knob (ADR-0010); lower if the server is weak |
 | `DEDUP_WINDOW_S` | 10 default | one event per plate string per window |
 | `EVENTS_CSV` / `MEDIA_DIR` | defaults fine | paths are relative to the repo root — always launch from there |
+| `MEDIA_PAD` | 0.6 default | context margin in saved JPGs (plate box grown per side); raise to ~1.0 to show more car, 0 = tight |
 | `PLATE_FORMATS` | `MERCOSUR_ONLY` or `MERCOSUR_PLUS_LEGACY` | operator choice (ADR-0008); legacy ON brings Paraguay/Peru 3+3 as `PATENTE_ALFANUM` noise |
 | `HTTP_HOST` / `HTTP_PORT` | `0.0.0.0` / pick a free port | 8090 here because 8080 is taken locally; no auth — LAN only (Q17) |
 | `DETECTOR_MODEL` / `OCR_MODEL` | defaults = best accuracy | step down only if the server CPU starves (§9) |

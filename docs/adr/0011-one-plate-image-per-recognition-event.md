@@ -18,7 +18,12 @@ named `{plate}_{raw-conf}_{sanitized-timestamp}.jpg` — the raw 4-decimal
 confidence and the row's first-sighting ISO timestamp with `:` replaced by
 `-` (Windows forbids colons in filenames), so each photo pairs **1:1 with its
 CSV row by name**. The crop is the best-confidence sighting among the winner's
-votes; JPEG quality is a hardcoded 95 in `alpr/media.py` (evidence, one-line
+votes, **grown by `MEDIA_PAD`** (env knob, default 0.6, an amendment decided
+with the operator once they saw a first tight artifact): the plate box plus
+that fraction of its own size per side, clamped to the frame — evidence photos
+show the vehicle, not just rubber. OCR stays on the tight 3 % crop (the accuracy
+ground: model-argmax pixels only); `MEDIA_PAD=0` restores tight artifacts.
+JPEG quality is a hardcoded 95 in `alpr/media.py` (evidence, one-line
 re-anchor). Unvalidated consensus and dedup-suppressed closures write nothing —
 the ADR-0009 "no row" rule extends verbatim: **no row, no artifact**.
 
@@ -34,4 +39,6 @@ Rejected: one photo per sighting (duplicate spam at 3 FPS); the track's
 highest-confidence crop regardless of text (photo could contradict the logged
 reading); re-cropping from the drop-oldest frame buffer at event close
 (the frames may already be gone by then); PNG (larger, no benefit for camera
-grain).
+grain); growing the OCR crop instead of only the artifact crop (the 3 % OCR
+margin is tuned to the reader's accuracy ground — widening it re-anchors the
+whole benchmark for zero evidence benefit).

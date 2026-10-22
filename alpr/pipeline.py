@@ -24,6 +24,7 @@ from .detector import PlateDetector
 from .ocr import PlateOcr
 from .validation import classify, normalize
 from .clarity import clarity
+from .media import context_crop
 
 LOGGER = logging.getLogger(__name__)
 
@@ -95,7 +96,13 @@ class Pipeline:
             raw, conf = self.ocr.recognize(crop)
             if not raw:
                 continue
-            self.tracker.record(now=timestamp, box=(x1, y1, x2, y2), raw=raw, confidence=conf, crop=crop)
+            # ADR-0011: the artifact keeps a CONTEXT crop (MEDIA_PAD margin) so the
+            # photo can show the vehicle; OCR above stays on the tight crop (Q4/Q17
+            # accuracy ground — argmax pixels only).
+            artifact = context_crop(frame, (x1, y1, x2, y2), settings.media_pad) or crop
+            self.tracker.record(
+                now=timestamp, box=(x1, y1, x2, y2), raw=raw, confidence=conf, crop=artifact
+            )
             text = normalize(raw)
             format_match = classify(text, include_legacy=settings.include_legacy)
             if format_match:

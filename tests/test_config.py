@@ -78,6 +78,18 @@ class LoadSettingsTests(unittest.TestCase):
             env_file.write_text("RTSP_ENDPOINT=cam.local:554/live\n", encoding="utf-8")
             self.assertEqual(load_settings(env_file).media_dir, Path("media"))
 
+    def test_media_pad_reads_and_defaults(self):
+        os.environ.pop("MEDIA_PAD", None)
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / ".env"
+            env_file.write_text("RTSP_ENDPOINT=cam.local:554/live\nMEDIA_PAD=1.0\n", encoding="utf-8")
+            self.assertEqual(load_settings(env_file).media_pad, 1.0)
+        os.environ.pop("MEDIA_PAD", None)
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / ".env"
+            env_file.write_text("RTSP_ENDPOINT=cam.local:554/live\n", encoding="utf-8")
+            self.assertEqual(load_settings(env_file).media_pad, 0.6)
+
     def test_plate_formats_default_is_mercosur_only(self):
         keys = ["PLATE_FORMATS"]
         for key in keys:

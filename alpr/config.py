@@ -25,6 +25,7 @@ class Settings:
     include_legacy: bool
     events_csv: Path
     media_dir: Path
+    media_pad: float
     roi: tuple[float, float, float, float]
     det_conf: float
     detector_model: str
@@ -58,6 +59,7 @@ def load_settings(env_path: Path = Path(".env"), *, require_endpoint: bool = Tru
         include_legacy=_plate_formats("PLATE_FORMATS", "MERCOSUR_ONLY"),
         events_csv=Path(os.environ.get("EVENTS_CSV", "events.csv")),
         media_dir=Path(os.environ.get("MEDIA_DIR", "media")),
+        media_pad=_float("MEDIA_PAD", 0.6),
         roi=_roi(os.environ.get("ROI", "")),
         det_conf=_float("DET_CONF_THRESH", 0.4),
         detector_model=os.environ.get("DETECTOR_MODEL", "yolo-v9-s-608-license-plates-end2end").strip(),

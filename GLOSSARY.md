@@ -41,7 +41,7 @@ The append-only CSV record of logged Recognition events — one row written when
 _Avoid_: event buffer, history file
 
 **Plate image artifact**:
-The JPG evidence photo that accompanies each logged Recognition event: the plate crop of the best-confidence sighting among the ones that voted for the consensus winner, written to the media folder (default `media/`) under a name carrying the row's own plate, raw confidence and timestamp so photo and CSV row pair one-to-one. An event with no logged row has no artifact (ADR-0011).
+The JPG evidence photo that accompanies each logged Recognition event: the plate crop (grown by the `MEDIA_PAD` context margin so part of the vehicle shows — the tight crop stays OCR-only) of the best-confidence sighting among the ones that voted for the consensus winner, written to the media folder (default `media/`) under a name carrying the row's own plate, raw confidence and timestamp so photo and CSV row pair one-to-one. An event with no logged row has no artifact (ADR-0011).
 _Avoid_: screenshot, snapshot, evidence frame
 
 **Dedup window**:

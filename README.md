@@ -107,12 +107,13 @@ decoded plate, status, clarity % (human-facing scale calibrated to the OCR famil
 plus the tail of the events log.
 `GET /plates.csv` serves the raw CSV for download. Every logged event also writes
 a plate evidence JPG into `MEDIA_DIR` (default `media/`), named after its CSV row
-so photo and row pair one-to-one (ADR-0011).
+so photo and row pair one-to-one (ADR-0011); the crop carries a `MEDIA_PAD`
+context margin so the photo shows part of the vehicle, not just the plate.
 
 All tuning knobs are in `.env` (see `.env.example`): endpoint, credentials, ROI
 (normalized `left,top,right,bottom`), `DETECT_FPS`, `TRACK_IOU_THRESH` and
 `TRACK_MAX_MISSES` (plate-track association), `DEDUP_WINDOW_S` (exact-string
-guard only), `MEDIA_DIR` (plate evidence JPGs, ADR-0011), `PLATE_FORMATS` (format set: `MERCOSUR_ONLY|MERCOSUR_PLUS_LEGACY`, ADR-0008),
+guard only), `MEDIA_DIR` (plate evidence JPGs + `MEDIA_PAD` context margin, ADR-0011), `PLATE_FORMATS` (format set: `MERCOSUR_ONLY|MERCOSUR_PLUS_LEGACY`, ADR-0008),
 model choice (`DETECTOR_MODEL` — any zoo tier, ADR-0010; `OCR_MODEL=cct_s_v2_global|cct_xs_v2_global|cct_s_v1_global|cct_xs_v1_global|arg_cnn_ocr`), render size, HTTP port.
 
 ## Deploying to another machine (step by step)

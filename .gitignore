@@ -6,6 +6,7 @@ private.toml
 sample.mp4
 sample2.mp4
 sample3.mp4
+sample4.mp4
 
 # Vendored ONNX weights are fetched by scripts/fetch_models.py (see docs/adr/0004)
 models/

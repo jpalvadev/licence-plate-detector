@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 
-from alpr.media import filename_for, save_plate_image
+from alpr.media import context_crop, filename_for, save_plate_image
 
 
 class FilenameTests(unittest.TestCase):
@@ -24,6 +24,26 @@ class FilenameTests(unittest.TestCase):
         name = filename_for("ABC123", 0.4, "2026-01-01T00:00:00+00:00")
         self.assertNotIn(":", name)
         self.assertEqual(name, "ABC123_0.4000_2026-01-01T00-00-00+00-00.jpg")
+
+
+class ContextCropTests(unittest.TestCase):
+    # ADR-0011 amendment: artifacts show vehicle context, so the plate box is
+    # grown by pad fraction of its own size per side, clamped to the frame.
+
+    def test_pad_grows_box_per_side(self):
+        frame = np.arange(60 * 200).reshape(60, 200).astype(np.uint8)  # h=60, w=200
+        crop = context_crop(frame, (40, 20, 100, 36), 0.5)  # box 60x16 -> mx=30, my=8
+        self.assertEqual(crop.shape[:2], (32, 120))  # (10,12)-(130,44) region
+
+    def test_clamps_to_frame_edges(self):
+        frame = np.zeros((60, 200, 3), dtype=np.uint8)
+        crop = context_crop(frame, (0, 0, 40, 10), 0.5)  # wants (-20,-5)-(60,15)
+        self.assertEqual(crop.shape[:2], (15, 60))  # clamped at top-left
+
+    def test_zero_pad_is_the_tight_box(self):
+        frame = np.zeros((60, 200, 3), dtype=np.uint8)
+        crop = context_crop(frame, (40, 20, 100, 36), 0.0)
+        self.assertEqual(crop.shape[:2], (16, 60))
 
 
 class ImageTests(unittest.TestCase):
