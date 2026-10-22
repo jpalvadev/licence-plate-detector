@@ -40,6 +40,10 @@ _Avoid_: tracker (that's the mechanism), blob, detection chain
 The append-only CSV record of logged Recognition events — one row written when an event **closes**, carrying the event's consensus reading over all its sightings (not the first sighting's reading). Only events with a validated consensus are logged (ADR-0009). Survives restarts; served to the frontend on demand.
 _Avoid_: event buffer, history file
 
+**Plate image artifact**:
+The JPG evidence photo that accompanies each logged Recognition event: the plate crop of the best-confidence sighting among the ones that voted for the consensus winner, written to the media folder (default `media/`) under a name carrying the row's own plate, raw confidence and timestamp so photo and CSV row pair one-to-one. An event with no logged row has no artifact (ADR-0011).
+_Avoid_: screenshot, snapshot, evidence frame
+
 **Dedup window**:
 The rolling time interval (default 10 s) whose only remaining role is a guard: once a Recognition event has closed with a given plate string, sightings producing that exact string within the window add no new Events log row (they belong to the same occurrence or a split track of it).
 _Avoid_: cooldown, TTL

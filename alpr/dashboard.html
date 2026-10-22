@@ -14,11 +14,21 @@
 
 <h3>Events log</h3>
 <table id="log"><thead><tr>
-  <th>timestamp</th><th>plate</th><th>status</th><th>conf</th>
+  <th>timestamp</th><th>patente</th><th>status</th><th>confidence</th>
 </tr></thead><tbody id="tbody"><tr><td colspan="4">loading…</td></tr></tbody></table>
 <a href="/plates.csv" download="events.csv">download events.csv</a>
 
 <script>
+// Display confidence: calibrated display scale mirroring the alpr/clarity.py anchors; the CSV keeps raw OCR conf.
+const ANCHORS = [[0,.30],[.10,.70],[.14,.88],[.18,.94],[.22,.98],[1,.99]];
+function confidence(v) {
+  if (v <= ANCHORS[0][0]) return ANCHORS[0][1];
+  for (let i = 0; i < ANCHORS.length - 1; i++) {
+    const [c0, p0] = ANCHORS[i], [c1, p1] = ANCHORS[i + 1];
+    if (v <= c1) return p0 + (v - c0) * (p1 - p0) / (c1 - c0);
+  }
+  return ANCHORS[ANCHORS.length - 1][1];
+}
 async function refreshLog() {
   try {
     const r = await fetch("/plates.csv?_=" + Date.now(), {cache:"no-store"});
@@ -27,8 +37,8 @@ async function refreshLog() {
     const tbody = document.getElementById("tbody");
     tbody.innerHTML = last.map(line => {
       const c = line.split(",");
-      const klass = c[2] === "VALIDATED_LEGACY" ? "legacy" : "car"; // every logged row is validated (ADR-0009)
-      return `<tr class="${klass}">` + c.map((v,i) => `<td>${i === 3 ? Number(v).toFixed(2) : v}</td>`).join("") + "</tr>";
+      const klass = c[2] === "PATENTE_ALFANUM" ? "legacy" : "car"; // every logged row is validated (ADR-0009)
+      return `<tr class="${klass}">` + c.map((v,i) => `<td>${i === 3 ? (100 * confidence(Number(v))).toFixed(0) + "%" : v}</td>`).join("") + "</tr>";
     }).join("");
   } catch (e) { /* server hiccup; next poll recovers */ }
 }

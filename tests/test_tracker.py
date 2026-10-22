@@ -10,7 +10,11 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
+import cv2
+
 from alpr.events import STATUS_CAR, STATUS_LEGACY, EventLog
+from alpr.media import filename_for
 from alpr.tracker import PlateTracker
 
 
@@ -301,6 +305,68 @@ class StreamLossFlushTests(unittest.TestCase):
                 tracker.end_pass(now=1000.0 + i)
             self.assertEqual(tracker.flush(now=1005.0), [])  # already closed: nothing re-written
             self.assertEqual(len(rows(log)), 1)
+
+
+class PlateImageArtifactTests(unittest.TestCase):
+    # ADR-0011: every logged event gets exactly one Plate image artifact — a JPG
+    # named after its row's fields, from the best-confidence sighting the
+    # consensus winner was voted from (never a higher-conf crop of another text).
+
+    def _crops(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        red = np.full((16, 64, 3), (0, 0, 255), dtype=np.uint8)
+        green = np.full((16, 64, 3), (0, 200, 0), dtype=np.uint8)
+        blue = np.full((16, 64, 3), (255, 0, 0), dtype=np.uint8)
+        return red, green, blue
+
+    def test_logged_event_writes_image_of_best_winner_crop(self):
+        red, green, blue = self._crops()
+        with tempfile.TemporaryDirectory() as tmp:
+            log = EventLog(Path(tmp) / "events.csv")
+            media = Path(tmp) / "media"
+            tracker = PlateTracker(log, iou_thresh=0.3, max_misses=3, dedup_window_s=10.0, media_dir=media)
+            tracker.record(now=1000.0, box=(0, 0, 100, 30), raw="AG841RU", confidence=0.10, crop=red)
+            tracker.record(now=1001.0, box=(2, 0, 102, 30), raw="AG841RU", confidence=0.22, crop=green)
+            tracker.record(now=1002.0, box=(4, 0, 104, 30), raw="AG841RV", confidence=0.30, crop=blue)
+            closed = tracker.flush(now=1003.0)
+            ts, text, status, conf = closed[0]
+            self.assertEqual(text, "AG841RU")  # plurality winner despite AG841RV's higher conf
+            files = sorted(media.glob("*.jpg"))
+            self.assertEqual([f.name for f in files], [filename_for(text, conf, ts)])
+            back = cv2.imdecode(np.frombuffer(files[0].read_bytes(), np.uint8), cv2.IMREAD_COLOR)
+            self.assertEqual(tuple(int(v) for v in back[8, 32]), (0, 200, 0))  # the 0.22 green, not blue/red
+
+    def test_unvalidated_event_writes_no_image(self):
+        _, green, _ = self._crops()
+        with tempfile.TemporaryDirectory() as tmp:
+            log = EventLog(Path(tmp) / "events.csv")
+            media = Path(tmp) / "media"
+            tracker = PlateTracker(log, iou_thresh=0.3, max_misses=3, dedup_window_s=10.0, media_dir=media)
+            tracker.record(now=1000.0, box=(0, 0, 100, 30), raw="517RP", confidence=0.5, crop=green)
+            self.assertEqual(tracker.flush(now=1001.0), [])
+            self.assertFalse(media.exists())  # no row, no artifact
+
+    def test_dedup_suppression_skips_second_image(self):
+        red, green, _ = self._crops()
+        with tempfile.TemporaryDirectory() as tmp:
+            log = EventLog(Path(tmp) / "events.csv")
+            media = Path(tmp) / "media"
+            tracker = PlateTracker(log, iou_thresh=0.3, max_misses=3, dedup_window_s=10.0, media_dir=media)
+            tracker.record(now=1000.0, box=(0, 0, 100, 30), raw="AG841RU", confidence=0.5, crop=green)
+            tracker.flush(now=1001.0)
+            self.assertEqual(len(rows(log)), 1)
+            tracker.record(now=1002.0, box=(800, 0, 900, 30), raw="AG841RU", confidence=0.55, crop=red)
+            tracker.flush(now=1003.0)
+            self.assertEqual(len(rows(log)), 1)  # guard still suppresses the row
+            self.assertEqual(len(list(media.glob("*.jpg"))), 1)  # and no artifact for it
+
+    def test_no_image_when_media_dir_unset(self):
+        _, green, _ = self._crops()
+        with tempfile.TemporaryDirectory() as tmp:
+            log = EventLog(Path(tmp) / "events.csv")
+            tracker = PlateTracker(log, iou_thresh=0.3, max_misses=3, dedup_window_s=10.0)
+            tracker.record(now=1000.0, box=(0, 0, 100, 30), raw="AG841RU", confidence=0.5, crop=green)
+            self.assertEqual(len(tracker.flush(now=1001.0)), 1)
+            self.assertFalse((Path(tmp) / "media").exists())
 
 
 if __name__ == "__main__":

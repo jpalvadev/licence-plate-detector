@@ -66,6 +66,18 @@ class LoadSettingsTests(unittest.TestCase):
             self.assertEqual(settings.track_iou_thresh, 0.5)
             self.assertEqual(settings.track_max_misses, 2)
 
+    def test_media_dir_reads_and_defaults(self):
+        os.environ.pop("MEDIA_DIR", None)
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / ".env"
+            env_file.write_text("RTSP_ENDPOINT=cam.local:554/live\nMEDIA_DIR=shots\n", encoding="utf-8")
+            self.assertEqual(load_settings(env_file).media_dir, Path("shots"))
+        os.environ.pop("MEDIA_DIR", None)  # dotenv keeps the earlier value unless the key is forgotten
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / ".env"
+            env_file.write_text("RTSP_ENDPOINT=cam.local:554/live\n", encoding="utf-8")
+            self.assertEqual(load_settings(env_file).media_dir, Path("media"))
+
     def test_plate_formats_default_is_mercosur_only(self):
         keys = ["PLATE_FORMATS"]
         for key in keys:

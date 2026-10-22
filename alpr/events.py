@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-HEADER = ("timestamp", "plate", "status", "confidence")
-STATUS_CAR = "VALIDATED_CAR"
-STATUS_LEGACY = "VALIDATED_LEGACY"
+HEADER = ("timestamp", "patente", "status", "confidence")
+STATUS_CAR = "PATENTE_MERCOSUR"
+STATUS_LEGACY = "PATENTE_ALFANUM"
 
 
 def status_for(format_match: str) -> str:

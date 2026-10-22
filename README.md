@@ -18,7 +18,7 @@ Alphabet is A–Z (no Ñ). Motorcycles are **out of the domain in either era** (
 Readings that match no format in the configured format set produce **no entry at all**:
 no CSV row, no dashboard row (ADR-0009) — they stay visible only as `?` boxes on the
 live stream. With legacy mode on, neighbouring countries sharing the 3+3 shape
-(Paraguay, Peru) validate as `VALIDATED_LEGACY` noise — the status column keeps
+(Paraguay, Peru) validate as `PATENTE_ALFANUM` noise — the status column keeps
 them filterable (ADR-0008).
 
 ## Architecture
@@ -32,6 +32,7 @@ RTSP camera ──ffmpeg(imageio-ffmpeg)──► capture thread ──► bound
                         plate tracker (one row per validated track)  JPEG buffer ──► /stream (MJPEG @960×540)
                                         ▼
                               events.csv (append-only) ──► GET /plates.csv + dashboard
+                                    └─► media/ (one plate JPG per event, ADR-0011)
 ```
 
 - Detection/OCR run at `DETECT_FPS` (3); the dashboard stream renders at the full source
@@ -101,13 +102,17 @@ python -m alpr --source clip.mp4 :: debug: identical pipeline over a local .mp4/
 ```
 
 Open the dashboard at `http://<server>:8080/` — MJPEG stream with bounding boxes,
-decoded plate, status, confidence, plus the tail of the events log.
-`GET /plates.csv` serves the raw CSV for download.
+decoded plate, status, clarity % (human-facing scale calibrated to the OCR family,
+`alpr/clarity.py`; the `events.csv` column keeps the raw mean-character softmax),
+plus the tail of the events log.
+`GET /plates.csv` serves the raw CSV for download. Every logged event also writes
+a plate evidence JPG into `MEDIA_DIR` (default `media/`), named after its CSV row
+so photo and row pair one-to-one (ADR-0011).
 
 All tuning knobs are in `.env` (see `.env.example`): endpoint, credentials, ROI
 (normalized `left,top,right,bottom`), `DETECT_FPS`, `TRACK_IOU_THRESH` and
 `TRACK_MAX_MISSES` (plate-track association), `DEDUP_WINDOW_S` (exact-string
-guard only), `PLATE_FORMATS` (format set: `MERCOSUR_ONLY|MERCOSUR_PLUS_LEGACY`, ADR-0008),
+guard only), `MEDIA_DIR` (plate evidence JPGs, ADR-0011), `PLATE_FORMATS` (format set: `MERCOSUR_ONLY|MERCOSUR_PLUS_LEGACY`, ADR-0008),
 model choice (`DETECTOR_MODEL` — any zoo tier, ADR-0010; `OCR_MODEL=cct_s_v2_global|cct_xs_v2_global|cct_s_v1_global|cct_xs_v1_global|arg_cnn_ocr`), render size, HTTP port.
 
 ## Deploying to another machine (step by step)
@@ -153,14 +158,14 @@ trigger the `STREAM OFFLINE` banner and the reconnect/backoff ladder, not a cras
 ## Development
 
 ```bash
-python -m unittest discover -s tests   # validation / events / config / tracker unit tests
+python -m unittest discover -s tests   # validation / events / config / tracker / clarity / media unit tests
 ```
 
 ## Repo layout
 
 ```
 alpr/               package: config, ingest, detector, ocr, validation, events,
-                    pipeline, server (+ dashboard.html)
+                    clarity, media, pipeline, server (+ dashboard.html)
 scripts/fetch_models.py                pinned-URL ONNX downloader with checksum verify
 BENCHMARK.md                           measured model-vs-model tables (Test rig on sample3.mp4)
 models/                                gitignored ONNX weights

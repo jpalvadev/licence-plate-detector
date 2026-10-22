@@ -23,6 +23,7 @@ from .ingest import FrameBuffer, RtspCapture, RtspReader
 from .detector import PlateDetector
 from .ocr import PlateOcr
 from .validation import classify, normalize
+from .clarity import clarity
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ class Pipeline:
             max_misses=settings.track_max_misses,
             dedup_window_s=settings.dedup_window_s,
             include_legacy=settings.include_legacy,
+            media_dir=settings.media_dir,
         )
 
         self.jpeg_buffer = FrameBuffer(maxlen=15)
@@ -93,12 +95,12 @@ class Pipeline:
             raw, conf = self.ocr.recognize(crop)
             if not raw:
                 continue
-            self.tracker.record(now=timestamp, box=(x1, y1, x2, y2), raw=raw, confidence=conf)
+            self.tracker.record(now=timestamp, box=(x1, y1, x2, y2), raw=raw, confidence=conf, crop=crop)
             text = normalize(raw)
             format_match = classify(text, include_legacy=settings.include_legacy)
             if format_match:
                 status = status_for(format_match)
-                label = f"{text} {status} {conf:.0%}"
+                label = f"{text} {status} {clarity(conf):.0f}%"  # display scale, see .clarity
                 overlays.append(Overlay(x1, y1, x2, y2, label, True))
             else:
                 overlays.append(Overlay(x1, y1, x2, y2, f"? {text}", False))

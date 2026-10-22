@@ -10,14 +10,19 @@ readings preferred, ties broken by higher confidence), but only when that
 consensus matches an active format: an unvalidated consensus logs no row at all
 (ADR-0009). ``dedup_window_s`` is only a last-line guard: a closed event's exact
 consensus string suppresses further identical rows inside the window, plugging
-duplicate rows from split tracks.
+duplicate rows from split tracks. Each logged row also writes one Plate image
+artifact (ADR-0011) in ``media_dir``: the crop of the best-confidence sighting
+the winning reading was voted from; ``media_dir=None`` disables artifacts.
 """
 
 from __future__ import annotations
 
+import numpy as np
 from datetime import datetime, timezone
+from pathlib import Path
 
 from .events import EventLog, status_for
+from .media import save_plate_image
 from .validation import classify, normalize
 
 # IoU is computed on boxes dilated by this fraction of their own size on each side:
@@ -29,9 +34,10 @@ _IOU_DILATE_FRAC = 0.5
 class _Sighting:
     """One detection-pass sighting accumulated on a track: normalized text + confidence."""
 
-    def __init__(self, text: str, confidence: float):
+    def __init__(self, text: str, confidence: float, crop: np.ndarray | None = None):
         self.text = text
         self.confidence = confidence
+        self.crop = crop  # plate pixels of this sighting, kept for the image artifact (ADR-0011)
 
 
 class _Track:
@@ -53,19 +59,23 @@ class PlateTracker:
     timestamp = first sighting, confidence = winning sighting.
     """
 
-    def __init__(self, log: EventLog, iou_thresh: float = 0.3, max_misses: int = 6, dedup_window_s: float = 10.0, include_legacy: bool = False):
+    def __init__(self, log: EventLog, iou_thresh: float = 0.3, max_misses: int = 6, dedup_window_s: float = 10.0, include_legacy: bool = False, media_dir: Path | None = None):
         self.log = log
         self.iou_thresh = iou_thresh
         self.max_misses = max_misses
         self.dedup_window_s = dedup_window_s
         self.include_legacy = include_legacy  # format set knob (ADR-0008): what counts as validated
+        self.media_dir = media_dir  # Plate image artifacts folder (ADR-0011); None disables them
         self.tracks: list[_Track] = []
         self.pass_index = 0
         self.closed_strings: dict[str, float] = {}
 
-    def record(self, now: float, box: tuple[float, float, float, float], raw: str, confidence: float) -> bool:
-        """Attach a sighting to the best-overlapping open track, else open a new one."""
-        sighting = _Sighting(normalize(raw), confidence)
+    def record(
+        self, now: float, box: tuple[float, float, float, float], raw: str, confidence: float,
+        crop: np.ndarray | None = None,
+    ) -> bool:
+        """Attach a sighting (optionally its plate crop, for the image artifact) to a track."""
+        sighting = _Sighting(normalize(raw), confidence, crop)
         best: _Track | None = None
         best_iou = 0.0
         for track in self.tracks:
@@ -111,8 +121,23 @@ class PlateTracker:
             self.closed_strings[text] = now
             row = (self._iso(track.first_now), text, status_for(format_match), confidence)
             self.log.append(*row)
+            self._save_artifact(track, text, confidence, row[0])
             rows.append(row)
         return rows
+
+    def _save_artifact(self, track: _Track, text: str, confidence: float, timestamp: str) -> None:
+        """ADR-0011: one Plate image artifact per logged row — the crop of the
+        best-confidence sighting the winning reading was voted from, so the photo
+        always agrees with the row; nothing when the seam is disabled."""
+        if self.media_dir is None:
+            return
+        best: _Sighting | None = None
+        for sighting in track.sightings:
+            if sighting.crop is not None and sighting.text == text:
+                if best is None or sighting.confidence > best.confidence:
+                    best = sighting
+        if best is not None:
+            save_plate_image(self.media_dir, text, confidence, timestamp, best.crop)
 
     def _consensus(self, track: _Track) -> tuple[str, float]:
         """Plurality reading across the track's sightings; validated preferred, ties by confidence."""

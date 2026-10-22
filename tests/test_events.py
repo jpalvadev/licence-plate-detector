@@ -17,19 +17,19 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(status_for("LEGACY"), STATUS_LEGACY)
 
     def test_status_for_rejects_non_format_match(self):
-        # ADR-0009: there is no UNVALIDATED status anymore; the tracker filters before
+        # ADR-0009: there is no VALIDAR status anymore; the tracker filters before
         # calling, so a non format match is a programming error (fail-fast convention).
         with self.assertRaises(ValueError):
             status_for("")
 
-    def test_no_motorcycle_status(self):
-        # ADR-0007: motorcycles never enter the domain; the status set is two-valued.
-        self.assertNotIn("VALIDATED_MOTORCYCLE", (STATUS_CAR, STATUS_LEGACY))
+    def test_status_set_is_two_valued(self):
+        # ADR-0007: two-wheelers never enter the domain; the status set is two-valued.
+        self.assertEqual({STATUS_CAR, STATUS_LEGACY}, {"PATENTE_MERCOSUR", "PATENTE_ALFANUM"})
 
     def test_no_class_column(self):
-        # ADR-0009: with motorcycles out of the domain the class column is a tautology.
+        # ADR-0009: with two-wheelers out of the domain the class column is a tautology.
         self.assertNotIn("vehicle_class", HEADER)
-        self.assertEqual(HEADER, ("timestamp", "plate", "status", "confidence"))
+        self.assertEqual(HEADER, ("timestamp", "patente", "status", "confidence"))
 
 
 class EventLogTests(unittest.TestCase):
@@ -41,7 +41,7 @@ class EventLogTests(unittest.TestCase):
             lines = log.path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(lines[0], ",".join(HEADER))
             self.assertEqual(len(lines), 3)
-            self.assertEqual(lines[2], "T2,ABC123,VALIDATED_LEGACY,0.4000")
+            self.assertEqual(lines[2], "T2,ABC123,PATENTE_ALFANUM,0.4000")
             # Reopening (a restart) does not rewrite the header.
             again = EventLog(log.path)
             self.assertEqual(len(again.path.read_text(encoding="utf-8").splitlines()), 3)
